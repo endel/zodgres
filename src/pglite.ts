@@ -21,11 +21,8 @@ export function usePglite() {
     server,
     db,
     close: async () => {
-      console.log("server will stop...");
       await server.stop();
-      console.log("server will close...");
       await db.close();
-      console.log("done");
     }
   };
 }

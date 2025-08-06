@@ -1,5 +1,10 @@
 import postgres from 'postgres';
+import * as zod from 'zod';
+
 import { usePglite } from './pglite.js';
+import { Collection } from './collection.js';
+
+export { zod as z };
 
 export class Database {
   public sql!: ReturnType<typeof postgres>;
@@ -8,6 +13,12 @@ export class Database {
    * in-memory for local development
    */
   protected pglite?: ReturnType<typeof usePglite>;
+
+  constructor(sql?: ReturnType<typeof postgres>) {
+    if (sql) {
+      this.sql = sql;
+    }
+  }
 
   public async connect<T extends Record<string, postgres.PostgresType> = {}> (uri: string, options?: postgres.Options<T> | undefined) {
     if (uri === ":memory:") {
@@ -36,7 +47,14 @@ export class Database {
     }
   }
 
-  public collection() {
+  public async collection<T extends zod.core.$ZodLooseShape>(
+    name: string,
+    shape: T,
+    params?: string | zod.core.$ZodObjectParams
+  ) {
+    const collection = new Collection<T>(name, zod.object(shape, params).strict(), this.sql);
+    await collection.migrate();
+    return collection
   }
 
   public async close(options?: { timeout?: number | undefined } | undefined) {

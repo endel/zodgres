@@ -1,7 +1,7 @@
 {
   "name": "@colyseus/collection",
   "version": "1.0.0",
-  "description": "Database Collections",
+  "description": " Database Collections for Postgres",
   "main": "lib/index.js",
   "type": "module",
   "scripts": {
@@ -24,7 +24,8 @@
   },
   "homepage": "https://github.com/colyseus/collection#readme",
   "dependencies": {
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "zod": "^4.0.14"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.6",
