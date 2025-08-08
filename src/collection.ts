@@ -2,6 +2,8 @@ import postgres from 'postgres';
 import * as zod from 'zod';
 
 export class Collection<T extends zod.core.$ZodLooseShape> {
+  public 'Type': zod.infer<typeof this.zod>;
+
   public name: string;
 
   public schema: {[name: string]: {
@@ -20,17 +22,16 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     this.sql = sql;
   }
 
-  public async create(data: zod.input<typeof this.zod>) {
-    const validatedData = await this.zod.parseAsync(data);
+  public async create(input: zod.input<typeof this.zod>): Promise<this['Type']> {
+    const data = await this.zod.parseAsync(input);
 
-    // this.sql`
-    //   INSERT INTO ${this.zod.shape}
-    //   VALUES (${validatedData})
-    //   RETURNING *
-    // `;
+    const sql = this.sql;
+    const result = await sql`INSERT INTO ${ sql.unsafe(this.name) } ${ sql(data as any, Object.keys(data)) }`;
 
-    // : Promise<zod.infer<T>>
-    return validatedData;
+    console.log("RESULT:", result);
+
+    // return result[0] as this['Type'];
+    return data;
   }
 
   public async migrate() {

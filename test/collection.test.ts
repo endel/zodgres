@@ -12,11 +12,12 @@ describe("collection", () => {
 
   describe("definition ", () => {
     it("syntax", async () => {
-      const User = await db.collection("users", {
-        name: z.string().max(100)
+      const users = await db.collection("users", {
+        name: z.string().max(100),
       });
 
-      console.log(User.schema);
+      const user = await users.create({ name: "Endel Dreyer" });
+      console.log(user);
 
       // User.create({ name: "John Doe" })
 
