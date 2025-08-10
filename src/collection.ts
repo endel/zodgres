@@ -22,16 +22,126 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     this.sql = sql;
   }
 
-  public async create(input: zod.input<typeof this.zod>): Promise<this['Type']> {
-    const data = await this.zod.parseAsync(input);
-
+  public async create(input: zod.input<typeof this.zod>): Promise<this['Type']>;
+  public async create(inputs: zod.input<typeof this.zod>[]): Promise<this['Type'][]>;
+  public async create(inputOrInputs: zod.input<typeof this.zod> | zod.input<typeof this.zod>[]): Promise<this['Type'] | this['Type'][]> {
     const sql = this.sql;
-    const result = await sql`INSERT INTO ${ sql.unsafe(this.name) } ${ sql(data as any, Object.keys(data)) }`;
 
-    console.log("RESULT:", result);
+    // handle array of inputs
+    if (Array.isArray(inputOrInputs)) {
+      const dataArray: any[] = [];
 
-    // return result[0] as this['Type'];
-    return data;
+      // validate each input
+      for (const input of inputOrInputs) {
+        const data = await this.zod.parse(input);
+        dataArray.push(data);
+      }
+
+      if (dataArray.length === 0) {
+        return [];
+      }
+
+      let results: any;
+      try {
+        results = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`;
+      } catch (e) {
+        console.error(e);
+        throw e;
+      }
+
+      return results.map((result: any, index: number) => ({ id: result.id, ...dataArray[index] }));
+
+    } else {
+      // handle single input
+      const data = await this.zod.parse(inputOrInputs);
+
+      let result: any;
+      try {
+        result = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(data as any, Object.keys(data))} RETURNING *`;
+      } catch (e) {
+        console.error(e);
+        throw e;
+      }
+
+      return { id: result[0].id, ...data };
+    }
+  }
+
+  public async select(
+    strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
+    ...values: any[]
+  ): Promise<this['Type'][]> {
+    // SQL keywords that should come after the FROM clause
+    const afterFromKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i;
+
+    const firstString = strings[0] ?? "*";
+    const firstRawString = strings.raw[0] ?? "*";
+
+    // Check if the first string contains keywords that should come after FROM
+    const match = firstString.match(afterFromKeywords);
+
+    let modifiedFirstString: string;
+    let modifiedFirstRawString: string;
+
+    if (match) {
+      // Insert FROM before the first keyword that should come after FROM
+      const keywordIndex = match.index!;
+      const beforeKeyword = firstString.substring(0, keywordIndex).trim();
+      const fromKeyword = firstString.substring(keywordIndex);
+      modifiedFirstString = `${beforeKeyword} FROM ${this.name} ${fromKeyword}`;
+
+      const rawKeywordIndex = firstRawString.search(afterFromKeywords);
+      const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
+      const fromKeywordRaw = firstRawString.substring(rawKeywordIndex);
+      modifiedFirstRawString = `${beforeKeywordRaw} FROM ${this.name} ${fromKeywordRaw}`;
+    } else {
+      // No keywords found, add FROM at the end as before
+      modifiedFirstString = `${firstString} FROM ${this.name}`;
+      modifiedFirstRawString = `${firstRawString} FROM ${this.name}`;
+    }
+
+    const newStrings = Object.assign(
+      [
+        `SELECT ${modifiedFirstString}`,
+        ...strings.slice(1)
+      ], {
+        raw: [
+          `SELECT ${modifiedFirstRawString}`,
+          ...strings.raw.slice(1)
+        ]
+      }
+    ) as TemplateStringsArray;
+
+    const result = await this.sql(newStrings, ...values);
+
+    return result.map((row: any, _: number) => {
+      // Convert null values to undefined and handle type conversions
+      const cleanedRow = Object.fromEntries(
+        Object.entries(row).map(([key, value]) => {
+          if (value === null) {
+            return [key, undefined];
+          }
+
+          // Get the Zod type for this field to determine if we need type conversion
+          const zodProperty = this.zod.shape[key] as zod.ZodType;
+
+          // Handle ZodOptional by getting the inner type
+          let innerType = zodProperty;
+          if (zodProperty instanceof zod.ZodOptional) {
+            innerType = zodProperty.unwrap();
+          }
+
+          // Convert string numbers back to actual numbers for numeric fields
+          if (innerType instanceof zod.ZodNumber && typeof value === 'string') {
+            const numValue = Number(value);
+            return [key, isNaN(numValue) ? value : numValue];
+          }
+
+          return [key, value];
+        })
+      );
+      return this.zod.parse(cleanedRow);
+    }) as this['Type'][];
   }
 
   public async migrate() {
@@ -65,6 +175,10 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     }
   }
 
+  public async drop() {
+    await this.sql`DROP TABLE IF EXISTS ${this.sql.unsafe(this.name)}`;
+  }
+
   private zodToTableSchema() {
     const schema: {[key: string]: {type: string, nullable: boolean, default?: any}} = {};
 
@@ -75,12 +189,13 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     if (jsonSchema.properties) {
       const requiredFields = new Set(jsonSchema.required || []);
 
-      for (const [key, propertySchema] of Object.entries(jsonSchema.properties)) {
-        const isRequired = requiredFields.has(key);
-        const zodProperty = this.zod.shape[key] as zod.ZodType;
+      for (const [field, propertySchema] of Object.entries(jsonSchema.properties)) {
+        const isRequired = requiredFields.has(field);
+        const zodProperty = this.zod.shape[field] as zod.ZodType;
 
-        schema[key] = this.jsonSchemaToPostgresType(
-          propertySchema as any,
+        schema[field] = this.jsonSchemaToPostgresType(
+          field,
+          propertySchema,
           !isRequired,
           zodProperty
         );
@@ -91,6 +206,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
   }
 
   private jsonSchemaToPostgresType(
+    field: string,
     jsonSchema: any,
     isNullable: boolean,
     zodProperty: zod.ZodType
@@ -99,18 +215,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     let defaultValue: any = undefined;
     let workingSchema = jsonSchema;
 
-    // Check if it's nullable (represented as oneOf with null)
-    if (jsonSchema.oneOf && Array.isArray(jsonSchema.oneOf)) {
-      const hasNull = jsonSchema.oneOf.some((schema: any) => schema.type === 'null');
-      if (hasNull) {
-        nullable = true;
-        // Get the non-null schema
-        const nonNullSchema = jsonSchema.oneOf.find((schema: any) => schema.type !== 'null');
-        if (nonNullSchema) {
-          workingSchema = nonNullSchema;
-        }
-      }
-    }
+    console.log("JSON SCHEMA:", jsonSchema);
 
     // Extract default value from the original Zod schema if it has ZodDefault
     if (zodProperty instanceof zod.ZodDefault) {
@@ -155,9 +260,14 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     }
   }
 
-  private async createTable(schema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
-    const columns = Object.entries(schema).map(([name, def]) => {
-      let columnDef = `${name} ${def.type}`;
+  private buildColumnDefinition(name: string, def: {type: string, nullable: boolean, default?: any}): string {
+    let columnDef = name;
+
+    if (name === 'id') {
+      columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY`;
+
+    } else {
+      columnDef += ` ${def.type}`;
 
       if (!def.nullable) {
         columnDef += ' NOT NULL';
@@ -171,8 +281,15 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
         }
       }
 
-      return columnDef;
-    }).join(', ');
+    }
+
+    return columnDef;
+  }
+
+  private async createTable(schema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
+    const columns = Object.entries(schema).map(([name, def]) =>
+      this.buildColumnDefinition(name, def)
+    ).join(', ');
 
     const createTableSQL = `CREATE TABLE ${this.name} (${columns})`;
     console.log('Creating table:', createTableSQL);
@@ -196,19 +313,8 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     // Add new columns
     for (const [columnName, columnDef] of Object.entries(newSchema)) {
       if (!existingColumnMap.has(columnName)) {
-        let addColumnSQL = `ALTER TABLE ${this.name} ADD COLUMN ${columnName} ${columnDef.type}`;
-
-        if (!columnDef.nullable) {
-          addColumnSQL += ' NOT NULL';
-        }
-
-        if (columnDef.default !== undefined) {
-          if (typeof columnDef.default === 'string') {
-            addColumnSQL += ` DEFAULT '${columnDef.default}'`;
-          } else {
-            addColumnSQL += ` DEFAULT ${columnDef.default}`;
-          }
-        }
+        const columnDefinition = this.buildColumnDefinition(columnName, columnDef);
+        const addColumnSQL = `ALTER TABLE ${this.name} ADD COLUMN ${columnDefinition}`;
 
         console.log('Adding column:', addColumnSQL);
         await this.sql.unsafe(addColumnSQL);
