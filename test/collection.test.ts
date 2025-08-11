@@ -15,6 +15,16 @@ describe("collection", () => {
 
   after(async () => await db.close());
 
+  const getItemsCollection = async () => {
+    const items = await db.collection("items", {
+      id: z.number().optional(),
+      name: z.string().max(100),
+    });
+    await items.drop();
+    await items.migrate();
+    return items;
+  };
+
   describe("insert", () => {
     it("auto-incrementing id", async () => {
       const users = await db.collection("users", {
@@ -51,20 +61,8 @@ describe("collection", () => {
   });
 
   describe("select", async () => {
-    const getCollection = async () => {
-      const items = await db.collection("items", {
-        id: z.number().optional(),
-        name: z.string().max(100),
-      });
-
-      await items.drop();
-      await items.migrate();
-
-      return items;
-    };
-
-    it("all", async () => {
-      const items = await getCollection();
+    it("should select all", async () => {
+      const items = await getItemsCollection();
 
       // allow to create multiple records at once
       await items.create([
@@ -83,8 +81,8 @@ describe("collection", () => {
       ]);
     });
 
-    it("select with no arguments", async () => {
-      const items = await getCollection();
+    it("should accept no arguments", async () => {
+      const items = await getItemsCollection();
 
       // allow to create multiple records at once
       await items.create([
@@ -104,8 +102,12 @@ describe("collection", () => {
       ]);
     });
 
-    it("where", async () => {
-      const items = await getCollection();
+
+  });
+
+  describe("select where", () => {
+    it("should select with conditions", async () => {
+      const items = await getItemsCollection();
 
       await items.create([
         { name: "One" },
@@ -116,8 +118,8 @@ describe("collection", () => {
 
       const three = await items.select`* WHERE name = ${"Three"}`;
       assert.deepStrictEqual(three, [{ id: 3, name: "Three" }]);
-
     });
-  });
+
+  })
 
 })
