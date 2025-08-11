@@ -41,13 +41,9 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
         return [];
       }
 
-      let results: any;
-      try {
-        results = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`;
-      } catch (e) {
-        console.error(e);
-        throw e;
-      }
+      const results = await this.executeSqlWithErrorHandling(() =>
+        sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`
+      );
 
       return results.map((result: any, index: number) => ({ id: result.id, ...dataArray[index] }));
 
@@ -55,15 +51,11 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
       // handle single input
       const data = await this.zod.parse(inputOrInputs);
 
-      let result: any;
-      try {
-        result = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(data as any, Object.keys(data))} RETURNING *`;
-      } catch (e) {
-        console.error(e);
-        throw e;
-      }
+      const result = await this.executeSqlWithErrorHandling(() =>
+        sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(data as any, Object.keys(data))} RETURNING *`
+      );
 
-      return { id: result[0].id, ...data };
+      return { id: result[0]?.id, ...data };
     }
   }
 
@@ -74,72 +66,40 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     // SQL keywords that should come after the FROM clause
     const afterFromKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i;
 
-    const firstString = strings[0] ?? "*";
-    const firstRawString = strings.raw[0] ?? "*";
-
-    // Check if the first string contains keywords that should come after FROM
-    const match = firstString.match(afterFromKeywords);
-
-    let modifiedFirstString: string;
-    let modifiedFirstRawString: string;
-
-    if (match) {
-      // Insert FROM before the first keyword that should come after FROM
-      const keywordIndex = match.index!;
-      const beforeKeyword = firstString.substring(0, keywordIndex).trim();
-      const fromKeyword = firstString.substring(keywordIndex);
-      modifiedFirstString = `${beforeKeyword} FROM ${this.name} ${fromKeyword}`;
-
-      const rawKeywordIndex = firstRawString.search(afterFromKeywords);
-      const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
-      const fromKeywordRaw = firstRawString.substring(rawKeywordIndex);
-      modifiedFirstRawString = `${beforeKeywordRaw} FROM ${this.name} ${fromKeywordRaw}`;
-    } else {
-      // No keywords found, add FROM at the end as before
-      modifiedFirstString = `${firstString} FROM ${this.name}`;
-      modifiedFirstRawString = `${firstRawString} FROM ${this.name}`;
-    }
-
-    const newStrings = Object.assign(
-      [
-        `SELECT ${modifiedFirstString}`,
-        ...strings.slice(1)
-      ], {
-        raw: [
-          `SELECT ${modifiedFirstRawString}`,
-          ...strings.raw.slice(1)
-        ]
-      }
-    ) as TemplateStringsArray;
+    const newStrings = this.buildSqlTemplateStrings(
+      strings,
+      'SELECT',
+      afterFromKeywords,
+      'FROM'
+    );
 
     const result = await this.sql(newStrings, ...values);
 
     return result.map((row: any, _: number) => {
-      // Convert null values to undefined and handle type conversions
-      const cleanedRow = Object.fromEntries(
-        Object.entries(row).map(([key, value]) => {
-          if (value === null) {
-            return [key, undefined];
-          }
+      const cleanedRow = this.convertRowFromDatabase(row);
+      return this.zod.parse(cleanedRow);
+    }) as this['Type'][];
+  }
 
-          // Get the Zod type for this field to determine if we need type conversion
-          const zodProperty = this.zod.shape[key] as zod.ZodType;
+  public async update(
+    strings: TemplateStringsArray,
+    ...values: any[]
+  ): Promise<this['Type'][]> {
+    // SQL keywords that should come after the SET clause
+    const afterSetKeywords = /\b(WHERE|ORDER\s+BY|LIMIT|OFFSET)\b/i;
 
-          // Handle ZodOptional by getting the inner type
-          let innerType = zodProperty;
-          if (zodProperty instanceof zod.ZodOptional) {
-            innerType = zodProperty.unwrap();
-          }
+    const newStrings = this.buildSqlTemplateStrings(
+      strings,
+      'UPDATE',
+      afterSetKeywords,
+      'SET',
+      'RETURNING *'
+    );
 
-          // Convert string numbers back to actual numbers for numeric fields
-          if (innerType instanceof zod.ZodNumber && typeof value === 'string') {
-            const numValue = Number(value);
-            return [key, isNaN(numValue) ? value : numValue];
-          }
+    const result = await this.sql(newStrings, ...values);
 
-          return [key, value];
-        })
-      );
+    return result.map((row: any, _: number) => {
+      const cleanedRow = this.convertRowFromDatabase(row);
       return this.zod.parse(cleanedRow);
     }) as this['Type'][];
   }
@@ -194,7 +154,6 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
         const zodProperty = this.zod.shape[field] as zod.ZodType;
 
         schema[field] = this.jsonSchemaToPostgresType(
-          field,
           propertySchema,
           !isRequired,
           zodProperty
@@ -206,7 +165,6 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
   }
 
   private jsonSchemaToPostgresType(
-    field: string,
     jsonSchema: any,
     isNullable: boolean,
     zodProperty: zod.ZodType
@@ -215,7 +173,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     let defaultValue: any = undefined;
     let workingSchema = jsonSchema;
 
-    console.log("JSON SCHEMA:", jsonSchema);
+    // console.log("JSON SCHEMA:", jsonSchema);
 
     // Extract default value from the original Zod schema if it has ZodDefault
     if (zodProperty instanceof zod.ZodDefault) {
@@ -292,7 +250,8 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     ).join(', ');
 
     const createTableSQL = `CREATE TABLE ${this.name} (${columns})`;
-    console.log('Creating table:', createTableSQL);
+
+    // console.log('Creating table:', createTableSQL);
 
     await this.sql.unsafe(createTableSQL);
 
@@ -332,30 +291,143 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
   private populateSchemaFromZod(schema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
     for (const [columnName, columnDef] of Object.entries(schema)) {
-      const length = this.extractLengthFromType(columnDef.type);
-      this.schema[columnName] = {
+      this.populateSchemaField(columnName, {
         type: columnDef.type,
-        length: length,
+        length: this.extractLengthFromType(columnDef.type),
         default: columnDef.default,
         nullable: columnDef.nullable,
-      };
+      });
     }
   }
 
   private populateSchemaFromExisting(existingColumns: any[]) {
     existingColumns.forEach((column) => {
-      this.schema[column.column_name] = {
+      this.populateSchemaField(column.column_name, {
         type: column.data_type,
         length: column.character_maximum_length || 0,
         default: column.column_default,
         nullable: column.is_nullable === 'YES',
-      };
+      });
     });
+  }
+
+  private populateSchemaField(
+    columnName: string,
+    fieldData: { type: string; length: number; default: any; nullable: boolean }
+  ) {
+    this.schema[columnName] = {
+      type: fieldData.type,
+      length: fieldData.length,
+      default: fieldData.default,
+      nullable: fieldData.nullable,
+    };
   }
 
   private extractLengthFromType(type: string): number {
     const match = type.match(/\((\d+)\)/);
     return match && match[1] ? parseInt(match[1], 10) : 0;
+  }
+
+  private convertRowFromDatabase(row: any): any {
+    // Convert null values to undefined and handle type conversions
+    return Object.fromEntries(
+      Object.entries(row).map(([key, value]) => {
+        if (value === null) {
+          return [key, undefined];
+        }
+
+        // Get the Zod type for this field to determine if we need type conversion
+        const zodProperty = this.zod.shape[key];
+
+        // Handle ZodOptional by getting the inner type
+        let innerType = zodProperty;
+        if (zodProperty instanceof zod.ZodOptional) {
+          innerType = zodProperty.unwrap();
+        }
+
+        // Convert string numbers back to actual numbers for numeric fields
+        if (innerType instanceof zod.ZodNumber && typeof value === 'string') {
+          const numValue = Number(value);
+          return [key, isNaN(numValue) ? value : numValue];
+        }
+
+        return [key, value];
+      })
+    );
+  }
+
+  private async executeSqlWithErrorHandling<T>(sqlOperation: () => Promise<T>): Promise<T> {
+    try {
+      return await sqlOperation();
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  }
+
+  private buildSqlTemplateStrings(
+    strings: TemplateStringsArray,
+    prefix: string,
+    keywordRegex: RegExp,
+    insertKeyword: string,
+    suffix: string = ''
+  ): TemplateStringsArray {
+    const firstString = strings[0] ?? (prefix === 'SELECT' ? "*" : "");
+    const firstRawString = strings.raw[0] ?? (prefix === 'SELECT' ? "*" : "");
+
+    // Check if the first string contains keywords that should come after the insert keyword
+    const match = firstString.match(keywordRegex);
+
+    let modifiedFirstString: string;
+    let modifiedFirstRawString: string;
+
+    if (match) {
+      // Insert keyword before the first keyword that should come after it
+      const keywordIndex = match.index!;
+      const beforeKeyword = firstString.substring(0, keywordIndex).trim();
+      const afterKeyword = firstString.substring(keywordIndex);
+
+      if (insertKeyword === 'FROM') {
+        modifiedFirstString = `${beforeKeyword} ${insertKeyword} ${this.name} ${afterKeyword}`;
+      } else {
+        modifiedFirstString = `${insertKeyword} ${beforeKeyword} ${afterKeyword}`;
+      }
+
+      const rawKeywordIndex = firstRawString.search(keywordRegex);
+      const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
+      const afterKeywordRaw = firstRawString.substring(rawKeywordIndex);
+
+      if (insertKeyword === 'FROM') {
+        modifiedFirstRawString = `${beforeKeywordRaw} ${insertKeyword} ${this.name} ${afterKeywordRaw}`;
+      } else {
+        modifiedFirstRawString = `${insertKeyword} ${beforeKeywordRaw} ${afterKeywordRaw}`;
+      }
+    } else {
+      // No keywords found, handle based on the insert keyword
+      if (insertKeyword === 'FROM') {
+        modifiedFirstString = `${firstString} ${insertKeyword} ${this.name}`;
+        modifiedFirstRawString = `${firstRawString} ${insertKeyword} ${this.name}`;
+      } else {
+        modifiedFirstString = `${insertKeyword} ${firstString}`;
+        modifiedFirstRawString = `${insertKeyword} ${firstRawString}`;
+      }
+    }
+
+    const finalStrings = suffix ? strings.slice(1, -1) : strings.slice(1);
+    const finalRawStrings = suffix ? strings.raw.slice(1, -1) : strings.raw.slice(1);
+
+    const lastString = suffix ? `${strings[strings.length - 1] || ""} ${suffix}` : "";
+    const lastRawString = suffix ? `${strings.raw[strings.raw.length - 1] || ""} ${suffix}` : "";
+
+    const newStrings = suffix
+      ? [`${prefix} ${this.name} ${modifiedFirstString}`, ...finalStrings, lastString]
+      : [`${prefix} ${modifiedFirstString}`, ...finalStrings];
+
+    const newRawStrings = suffix
+      ? [`${prefix} ${this.name} ${modifiedFirstRawString}`, ...finalRawStrings, lastRawString]
+      : [`${prefix} ${modifiedFirstRawString}`, ...finalRawStrings];
+
+    return Object.assign(newStrings, { raw: newRawStrings }) as TemplateStringsArray;
   }
 
 }
