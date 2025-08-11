@@ -81,6 +81,31 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     }) as this['Type'][];
   }
 
+  public async selectOne(
+    strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
+    ...values: any[]
+  ): Promise<this['Type'] | undefined> {
+    // Check if LIMIT is already present in the query
+    let modifiedStrings = strings;
+
+    if (/\blimit\b/i.test(strings.join(''))) {
+      throw new Error(".selectOne() does not accept LIMIT");
+
+    } else {
+      // Add LIMIT 1 to the last string
+      const newStrings = [...strings];
+      const newRawStrings = [...strings.raw];
+
+      newStrings[newStrings.length - 1] = (newStrings[newStrings.length - 1] || '') + ' LIMIT 1';
+      newRawStrings[newRawStrings.length - 1] = (newRawStrings[newRawStrings.length - 1] || '') + ' LIMIT 1';
+
+      modifiedStrings = Object.assign(newStrings, { raw: newRawStrings }) as TemplateStringsArray;
+    }
+
+    const results = await this.select(modifiedStrings, ...values);
+    return results[0];
+  }
+
   public async update(
     strings: TemplateStringsArray,
     ...values: any[]

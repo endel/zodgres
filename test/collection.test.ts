@@ -105,7 +105,27 @@ describe("collection", () => {
       ]);
     });
 
+  });
 
+  describe("select one", () => {
+    it("without explicit limit", async () => {
+      const items = await getItemsCollection();
+
+      await items.create([
+        { name: "One" },
+        { name: "Two" },
+        { name: "Three" },
+        { name: "Four" },
+      ]);
+
+      const one = await items.selectOne`*`;
+      assert.deepStrictEqual(one, { id: 1, name: "One" });
+    });
+
+    it("should throw if LIMIT is present", async () => {
+      const items = await getItemsCollection();
+      assert.rejects(() => items.selectOne`* LIMIT 1`, /LIMIT/i);
+    });
   });
 
   describe("select where", () => {
