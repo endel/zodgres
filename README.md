@@ -13,13 +13,13 @@ Database Collections for Postgres with type-safe schema validation using Zod.
 ## Installation
 
 ```bash
-npm install @colyseus/collection
+npm install zodgres
 ```
 
 ## Quick Start
 
 ```typescript
-import { connect, z } from '@colyseus/collection';
+import { connect, z } from 'zodgres';
 
 // Connect to database
 const db = await connect('postgres://user:password@localhost:5432/mydb');
