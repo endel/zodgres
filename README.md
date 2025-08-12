@@ -1,6 +1,8 @@
 # Zodgres
 
-Database Collections for Postgres with type-safe schema validation using Zod.
+A tiny wrapper on top of Postgres.js with type-safe schema validation using Zod.
+
+This is not an ORM, and never will be.
 
 ## Features
 

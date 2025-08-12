@@ -8,9 +8,9 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
   public schema: {[name: string]: {
     type: string;
-    length: number;
     default: string;
     nullable: boolean;
+    maxLength: number | undefined;
   }} = {};
 
   protected zod: zod.ZodObject<T>;
@@ -147,11 +147,11 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     } else {
       // Get existing columns
       const existingColumns = await this.sql`
-        select
+        SELECT
           column_name, data_type, character_maximum_length, column_default, is_nullable
-        from
+        FROM
           information_schema.columns
-        where
+        WHERE
           table_name = ${this.name}
       `;
 
@@ -294,6 +294,8 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
       });
     });
 
+    console.log("EXISTING COLUMNS:", existingColumns);
+
     // Add new columns
     for (const [columnName, columnDef] of Object.entries(newSchema)) {
       if (!existingColumnMap.has(columnName)) {
@@ -302,6 +304,16 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
         console.log('Adding column:', addColumnSQL);
         await this.sql.unsafe(addColumnSQL);
+      } else if (existingColumnMap.get(columnName)?.type !== columnDef.type) {
+        console.log("EXISTING COLUMN:", {
+          columnName,
+          existing: existingColumnMap.get(columnName),
+          new: columnDef,
+        });
+
+        const alterColumnSQL = `ALTER TABLE ${this.name} ALTER COLUMN ${columnName} TYPE ${columnDef.type}`;
+        // console.log('Altering column:', alterColumnSQL);
+        // await this.sql.unsafe(alterColumnSQL);
       }
     }
 
@@ -311,14 +323,13 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
     // Note: We're not dropping columns that exist in DB but not in schema
     // This is a safety measure to prevent data loss
-    // If you want to drop columns, you'd need to implement that logic here
   }
 
   private populateSchemaFromZod(schema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
     for (const [columnName, columnDef] of Object.entries(schema)) {
       this.populateSchemaField(columnName, {
         type: columnDef.type,
-        length: this.extractLengthFromType(columnDef.type),
+        maxLength: this.extractMaxLengthFromType(columnDef.type),
         default: columnDef.default,
         nullable: columnDef.nullable,
       });
@@ -329,7 +340,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     existingColumns.forEach((column) => {
       this.populateSchemaField(column.column_name, {
         type: column.data_type,
-        length: column.character_maximum_length || 0,
+        maxLength: column.character_maximum_length || undefined,
         default: column.column_default,
         nullable: column.is_nullable === 'YES',
       });
@@ -338,19 +349,19 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
   private populateSchemaField(
     columnName: string,
-    fieldData: { type: string; length: number; default: any; nullable: boolean }
+    fieldData: { type: string; maxLength: number | undefined; default: any; nullable: boolean }
   ) {
     this.schema[columnName] = {
       type: fieldData.type,
-      length: fieldData.length,
+      maxLength: fieldData.maxLength,
       default: fieldData.default,
       nullable: fieldData.nullable,
     };
   }
 
-  private extractLengthFromType(type: string): number {
+  private extractMaxLengthFromType(type: string): number | undefined {
     const match = type.match(/\((\d+)\)/);
-    return match && match[1] ? parseInt(match[1], 10) : 0;
+    return match && match[1] ? parseInt(match[1], 10) : undefined;
   }
 
   private convertRowFromDatabase(row: any): any {

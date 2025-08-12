@@ -1,28 +1,46 @@
 {
-  "name": "@colyseus/collection",
-  "version": "1.0.0",
-  "description": " Database Collections for Postgres",
-  "main": "lib/index.js",
+  "name": "zodgres",
+  "version": "0.1.0",
+  "description": "Postgres.js + Zod",
   "type": "module",
   "scripts": {
-    "test": "mocha --require tsx test/**/*.test.ts"
+    "test": "mocha --require tsx test/**/*.test.ts",
+    "build": "pkgroll build",
+    "compile": "tsc --noEmit",
+    "prepublishOnly": "npm run compile && npm run build"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    "require": {
+      "types": "./dist/index.d.cts",
+      "default": "./dist/index.cjs"
+    },
+    "import": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/colyseus/collection.git"
+    "url": "git+ssh://git@github.com/endel/zodgres.git"
   },
-  "keywords": [
-    "colyseus",
-    "db",
-    "collection",
-    "collections"
-  ],
   "author": "Endel Dreyer",
   "license": "MIT",
+  "keywords": [
+    "zod",
+    "postgres",
+    "database",
+    "collections"
+  ],
+  "files": [
+    "dist", "README.md", "LICENSE"
+  ],
   "bugs": {
-    "url": "https://github.com/colyseus/collection/issues"
+    "url": "https://github.com/endel/zodgres/issues"
   },
-  "homepage": "https://github.com/colyseus/collection#readme",
+  "homepage": "https://github.com/endel/zodgres#readme",
   "dependencies": {
     "postgres": "^3.4.7",
     "zod": "^4.0.14"
@@ -33,6 +51,7 @@
     "@types/mocha": "^10.0.10",
     "bun-types": "^1.2.19",
     "mocha": "^11.7.1",
+    "pkgroll": "^2.15.3",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2"
   },

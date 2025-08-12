@@ -268,4 +268,63 @@ describe("collection", () => {
     });
   });
 
-})
+  describe("auto-migration", () => {
+
+    describe("field types", () => {
+      it("number = numeric", async () => {
+        const c1 = await db.collection("types", {
+          age: z.number().min(0).max(100),
+        });
+        await c1.drop();
+        await c1.migrate();
+
+        assert.deepStrictEqual(c1.schema.age, {
+          type: 'DECIMAL',
+          maxLength: undefined,
+          default: undefined,
+          nullable: false
+        });
+
+        const c2 = await db.collection("types", {
+          age: z.number().min(0).max(100),
+        });
+
+        assert.deepStrictEqual(c2.schema, c1.schema);
+      });
+    });
+
+    it("should convert integer fields to varchar", async () => {
+      const users1 = await db.collection("users", {
+        id: z.number().optional(),
+        age: z.number().min(0).max(100),
+      });
+
+      await users1.drop();
+      await users1.migrate();
+
+      await users1.create([
+        { age: 25 },
+        { age: 30 },
+      ]);
+
+      const users1Rows = await users1.select();
+      assert.deepStrictEqual(users1Rows, [
+        { id: 1, age: 25 },
+        { id: 2, age: 30 },
+      ]);
+
+      const users2 = await db.collection("users", {
+        id: z.number().optional(),
+        age: z.string(),
+      });
+      await users2.update`age = age + ${" updated!"}`;
+      const users2Rows = await users2.select();
+      assert.deepStrictEqual(users2Rows, [
+        { id: 1, age: "25 updated!" },
+        { id: 2, age: "30 updated!" },
+      ]);
+    });
+
+  });
+
+});
