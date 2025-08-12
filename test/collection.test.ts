@@ -268,9 +268,9 @@ describe("collection", () => {
     });
   });
 
-  describe("auto-migration", () => {
+  describe("migrations", () => {
 
-    describe("field types", () => {
+    describe("create table", () => {
       it("number = numeric", async () => {
         const c = await db.collection("types", {
           value: z.number(),
@@ -280,6 +280,10 @@ describe("collection", () => {
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: 'numeric', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
+
+        const insertRows = [{ value: Math.PI }, { value: 3.14 }];
+        await c.create(insertRows);
+        assert.deepStrictEqual(await c.select(), insertRows);
       });
 
       it("float32 = real", async () => {
@@ -305,36 +309,38 @@ describe("collection", () => {
       });
     });
 
-    it("should convert integer fields to varchar", async () => {
-      const users1 = await db.collection("users", {
-        id: z.number().optional(),
-        age: z.number().min(0).max(100),
+    describe("alter table", () => {
+      it("should convert integer fields to varchar", async () => {
+        const users1 = await db.collection("users", {
+          id: z.number().optional(),
+          age: z.number().min(0).max(100),
+        });
+
+        await users1.drop();
+        await users1.migrate();
+
+        await users1.create([
+          { age: 25 },
+          { age: 30 },
+        ]);
+
+        const users1Rows = await users1.select();
+        assert.deepStrictEqual(users1Rows, [
+          { id: 1, age: 25 },
+          { id: 2, age: 30 },
+        ]);
+
+        const users2 = await db.collection("users", {
+          id: z.number().optional(),
+          age: z.string(),
+        });
+        await users2.update`age = age + ${" updated!"}`;
+        const users2Rows = await users2.select();
+        assert.deepStrictEqual(users2Rows, [
+          { id: 1, age: "25 updated!" },
+          { id: 2, age: "30 updated!" },
+        ]);
       });
-
-      await users1.drop();
-      await users1.migrate();
-
-      await users1.create([
-        { age: 25 },
-        { age: 30 },
-      ]);
-
-      const users1Rows = await users1.select();
-      assert.deepStrictEqual(users1Rows, [
-        { id: 1, age: 25 },
-        { id: 2, age: 30 },
-      ]);
-
-      const users2 = await db.collection("users", {
-        id: z.number().optional(),
-        age: z.string(),
-      });
-      await users2.update`age = age + ${" updated!"}`;
-      const users2Rows = await users2.select();
-      assert.deepStrictEqual(users2Rows, [
-        { id: 1, age: "25 updated!" },
-        { id: 2, age: "30 updated!" },
-      ]);
     });
 
   });
