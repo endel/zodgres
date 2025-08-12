@@ -1,7 +1,9 @@
 import postgres from 'postgres';
 import * as zod from 'zod';
 
-export class Collection<T extends zod.core.$ZodLooseShape> {
+const DEFAULT_METHODS = ['now()', 'gen_random_uuid()',];
+
+export class Collection<T extends zod.core.$ZodLooseShape = any> {
   public 'Type': zod.infer<typeof this.zod>;
 
   public name: string;
@@ -22,6 +24,15 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     this.sql = sql;
   }
 
+  public parse(input: zod.input<typeof this.zod>): this['Type'] {
+    return this.zod.parse(input);
+  }
+
+  /**
+   * Insert is an alias for create.
+   */
+  public insert = this.create;
+
   public async create(input: zod.input<typeof this.zod>): Promise<this['Type']>;
   public async create(inputs: zod.input<typeof this.zod>[]): Promise<this['Type'][]>;
   public async create(inputOrInputs: zod.input<typeof this.zod> | zod.input<typeof this.zod>[]): Promise<this['Type'] | this['Type'][]> {
@@ -33,29 +44,30 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
       // validate each input
       for (const input of inputOrInputs) {
-        const data = await this.zod.parse(input);
-        dataArray.push(data);
+        dataArray.push(this.zod.parse(input));
       }
 
       if (dataArray.length === 0) {
         return [];
       }
 
-      const results = await this.executeSqlWithErrorHandling(() =>
-        sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`
-      );
-
-      return results.map((result: any, index: number) => ({ id: result.id, ...dataArray[index] }));
+      const results = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`;
+      return results.map((result: any, index: number) => ({ ...result, ...dataArray[index] })) as this['Type'][];
 
     } else {
       // handle single input
       const data = await this.zod.parse(inputOrInputs);
+      const keys = Object.keys(data);
 
-      const result = await this.executeSqlWithErrorHandling(() =>
-        sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(data as any, Object.keys(data))} RETURNING *`
-      );
+      const result = await sql`
+        INSERT INTO ${sql.unsafe(this.name)}
+        ${(keys.length > 0)
+          ? sql(data as any, keys)
+          : sql.unsafe('DEFAULT VALUES')}
+        RETURNING *
+      `;
 
-      return { id: result[0]?.id, ...data };
+      return { ...result[0], ...data } as this['Type'];
     }
   }
 
@@ -129,6 +141,15 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
     }) as this['Type'][];
   }
 
+  public async delete(
+    strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
+    ...values: any[]
+  ): Promise<number> {
+    const newStrings = this.buildSqlTemplateStrings(strings, 'DELETE', /WHERE/i, 'FROM', 'RETURNING 1');
+    const result = await this.sql(newStrings, ...values);
+    return result[0]?.count ?? 0;
+  }
+
   public async migrate() {
     // Check if table exists
     const tableExists = await this.sql`
@@ -171,86 +192,92 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
   private zodToTableSchema() {
     const schema: {[key: string]: {type: string, nullable: boolean, default?: any}} = {};
 
-    // Convert the entire Zod schema to JSON Schema once
-    const jsonSchema = zod.toJSONSchema(this.zod);
-
-    // Work with the JSON Schema properties
-    if (jsonSchema.properties) {
-      const requiredFields = new Set(jsonSchema.required || []);
-
-      for (const [field, propertySchema] of Object.entries(jsonSchema.properties)) {
-        const isRequired = requiredFields.has(field);
-        const zodProperty = this.zod.shape[field] as zod.ZodType;
-
-        schema[field] = this.jsonSchemaToPostgresType(
-          propertySchema,
-          !isRequired,
-          zodProperty
-        );
-      }
+    for (const field in this.zod.shape) {
+      schema[field] = this.zodToPostgresType(this.zod.shape[field] as zod.ZodType);
     }
 
     return schema;
   }
 
-  private jsonSchemaToPostgresType(
-    jsonSchema: any,
-    isNullable: boolean,
-    zodProperty: zod.ZodType
-  ): {type: string, nullable: boolean, default?: any} {
-    let nullable = isNullable;
+  private zodToPostgresType(zodProperty: zod.ZodType): {type: string, nullable: boolean, default?: any} {
+    let nullable = false;
     let defaultValue: any = undefined;
-    let workingSchema = jsonSchema;
+    let currentType: any = zodProperty;
 
-    // console.log("JSON SCHEMA:", jsonSchema);
-
-    // Extract default value from the original Zod schema if it has ZodDefault
-    if (zodProperty instanceof zod.ZodDefault) {
-      defaultValue = typeof zodProperty.def.defaultValue === 'function'
-        ? zodProperty.def.defaultValue()
-        : zodProperty.def.defaultValue;
+    // Handle wrapped types (Optional, Nullable, Default)
+    while (currentType) {
+      if (currentType instanceof zod.ZodOptional) {
+        nullable = true;
+        currentType = currentType.unwrap();
+      } else if (currentType instanceof zod.ZodNullable) {
+        nullable = true;
+        currentType = currentType.unwrap();
+      } else if (currentType instanceof zod.ZodDefault) {
+        defaultValue = typeof currentType.def.defaultValue === 'function'
+          ? currentType.def.defaultValue()
+          : currentType.def.defaultValue;
+        currentType = currentType.def.innerType;
+      } else {
+        break;
+      }
     }
 
-    // Map JSON Schema types to PostgreSQL types
-    switch (workingSchema.type) {
-      case 'string':
-        // Check for maxLength constraint
-        if (workingSchema.maxLength && typeof workingSchema.maxLength === 'number') {
-          return { type: `VARCHAR(${workingSchema.maxLength})`, nullable, default: defaultValue };
-        }
+    // Map Zod types directly to PostgreSQL types
+    if (currentType instanceof zod.ZodString) {
+      // Check for maxLength constraint
+      if (currentType.maxLength !== null) {
+        return { type: `VARCHAR(${currentType.maxLength})`, nullable, default: defaultValue };
+      }
+      return { type: 'TEXT', nullable, default: defaultValue };
 
-        // Handle dates (they might come as strings with format)
-        if (workingSchema.format === 'date-time' || workingSchema.format === 'date') {
-          return { type: 'TIMESTAMP', nullable, default: defaultValue };
-        }
+    } else if (currentType instanceof zod.ZodNumber) {
+      // Handle different number formats
+      switch (currentType.format) {
+        case 'float32':
+          return { type: 'REAL', nullable, default: defaultValue };
+        case 'float64':
+          return { type: 'DOUBLE PRECISION', nullable, default: defaultValue };
+        default:
+          return { type: 'DECIMAL', nullable, default: defaultValue };
+      }
 
-        return { type: 'TEXT', nullable, default: defaultValue };
+    } else if (currentType instanceof zod.ZodBoolean) {
+      return { type: 'BOOLEAN', nullable, default: defaultValue };
 
-      case 'integer':
-        return { type: 'INTEGER', nullable, default: defaultValue };
+    } else if (currentType instanceof zod.ZodDate) {
+      return { type: 'TIMESTAMP', nullable, default: (defaultValue) ? `now()` : null };
 
-      case 'number':
-        switch ((zodProperty.def as zod.ZodNumber).format) {
-          case 'float32':
-            return { type: 'REAL', nullable, default: defaultValue };
-          case 'float64':
-            return { type: 'DOUBLE PRECISION', nullable, default: defaultValue };
-          default:
-            return { type: 'DECIMAL', nullable, default: defaultValue };
-        }
+    } else if (currentType instanceof zod.ZodArray) {
+      return { type: 'JSONB', nullable, default: defaultValue };
 
-      case 'boolean':
-        return { type: 'BOOLEAN', nullable, default: defaultValue };
+    } else if (currentType instanceof zod.ZodObject) {
+      return { type: 'JSONB', nullable, default: defaultValue };
 
-      case 'array':
-        return { type: 'JSONB', nullable, default: defaultValue };
+    } else if (currentType instanceof zod.ZodRecord) {
+      return { type: 'JSONB', nullable, default: defaultValue };
 
-      case 'object':
-        return { type: 'JSONB', nullable, default: defaultValue };
+    } else if (currentType instanceof zod.ZodMap) {
+      return { type: 'JSONB', nullable, default: defaultValue };
 
-      default:
-        // Default fallback
-        return { type: 'TEXT', nullable, default: defaultValue };
+    } else if (currentType instanceof zod.ZodAny) {
+      return { type: 'JSONB', nullable, default: defaultValue };
+
+    } else if (currentType instanceof zod.ZodEnum) {
+      return { type: 'TEXT', nullable, default: defaultValue };
+
+    } else if (currentType instanceof zod.ZodLiteral) {
+      return { type: 'TEXT', nullable, default: defaultValue };
+
+    } else if (currentType instanceof zod.ZodUnion) {
+      // For unions, default to TEXT unless we can determine a more specific type
+      return { type: 'TEXT', nullable, default: defaultValue };
+
+    } else if (currentType instanceof zod.ZodGUID || currentType instanceof zod.ZodUUID) {
+      return { type: 'UUID', nullable, default: `gen_random_uuid()` };
+
+    } else {
+      // Default fallback for unknown types
+      return { type: 'TEXT', nullable, default: defaultValue };
     }
   }
 
@@ -268,7 +295,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
       }
 
       if (def.default !== undefined) {
-        if (typeof def.default === 'string') {
+        if (typeof def.default === 'string' && !DEFAULT_METHODS.includes(def.default)) {
           columnDef += ` DEFAULT '${def.default}'`;
         } else {
           columnDef += ` DEFAULT ${def.default}`;
@@ -305,7 +332,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
       });
     });
 
-    console.log("EXISTING COLUMNS:", existingColumns);
+    // console.log("EXISTING COLUMNS:", existingColumns);
 
     // Add new columns
     for (const [columnName, columnDef] of Object.entries(newSchema)) {
@@ -315,12 +342,14 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
         console.log('Adding column:', addColumnSQL);
         await this.sql.unsafe(addColumnSQL);
+
       } else if (existingColumnMap.get(columnName)?.type !== columnDef.type) {
-        console.log("EXISTING COLUMN:", {
-          columnName,
-          existing: existingColumnMap.get(columnName),
-          new: columnDef,
-        });
+
+        // console.log("EXISTING COLUMN:", {
+        //   columnName,
+        //   existing: existingColumnMap.get(columnName),
+        //   new: columnDef,
+        // });
 
         const alterColumnSQL = `ALTER TABLE ${this.name} ALTER COLUMN ${columnName} TYPE ${columnDef.type}`;
         // console.log('Altering column:', alterColumnSQL);
@@ -401,15 +430,6 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
         return [key, value];
       })
     );
-  }
-
-  private async executeSqlWithErrorHandling<T>(sqlOperation: () => Promise<T>): Promise<T> {
-    try {
-      return await sqlOperation();
-    } catch (e) {
-      console.error(e);
-      throw e;
-    }
   }
 
   private buildSqlTemplateStrings(

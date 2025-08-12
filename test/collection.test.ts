@@ -1,5 +1,6 @@
 import assert from "assert";
 import { connect, Database, z } from "../src/index.js";
+import { init } from "./utils.js";
 
 describe("collection", () => {
   let db: Database;
@@ -8,7 +9,7 @@ describe("collection", () => {
   // after(async () => { await db.close(); })
 
   before(async () => {
-    db = await connect("postgres://postgres:postgres@localhost:5432/postgres");
+    db = await connect("postgres://postgres:postgres@localhost:5432/postgres", { debug: true });
     // drop collection tables
     await db.sql`DROP TABLE IF EXISTS users`;
   })
@@ -20,8 +21,7 @@ describe("collection", () => {
       id: z.number().optional(),
       name: z.string().max(100),
     });
-    await items.drop();
-    await items.migrate();
+    await init(items);
     return items;
   };
 
@@ -31,8 +31,7 @@ describe("collection", () => {
       name: z.string().max(100),
       age: z.number().min(0).max(100).optional(),
     });
-    await users.drop();
-    await users.migrate();
+    await init(users);
     return users;
   };
 
@@ -41,7 +40,7 @@ describe("collection", () => {
       const users = await getUsersCollection();
 
       const user1 = await users.create({ name: "Endel Dreyer" });
-      assert.deepStrictEqual(user1, { id: 1, name: "Endel Dreyer" });
+      assert.deepStrictEqual(user1, { id: 1, name: "Endel Dreyer", age: null });
 
       const user2 = await users.create({ name: "Steve Jobs", age: 56 });
       assert.deepStrictEqual(user2, { id: 2, name: "Steve Jobs", age: 56 });
@@ -57,7 +56,7 @@ describe("collection", () => {
       ]);
 
       assert.deepStrictEqual(all, [
-        { id: 1, name: "Endel Dreyer" },
+        { id: 1, name: "Endel Dreyer", age: null },
         { id: 2, name: "Steve Jobs", age: 56 },
       ]);
     });
@@ -227,8 +226,7 @@ describe("collection", () => {
         active: z.boolean().optional(),
       });
 
-      await users.drop();
-      await users.migrate();
+      await init(users);
 
       await users.create([
         { name: "Alice", age: 25, active: true },
@@ -268,44 +266,146 @@ describe("collection", () => {
     });
   });
 
+  describe("delete", () => {
+    it("should return the number of deleted records", async () => {
+      const items = await getItemsCollection();
+      await items.create([{ name: "One" }, { name: "Two" }]);
+      assert.deepStrictEqual(await items.delete(), 2);
+
+      // allow DELETE RETURNING *
+
+      const all = await items.select();
+      assert.deepStrictEqual(all, []);
+    });
+  });
+
   describe("migrations", () => {
-
     describe("create table", () => {
-      it("number = numeric", async () => {
-        const c = await db.collection("types", {
-          value: z.number(),
-        });
-        await c.drop();
-        await c.migrate();
-        assert.deepStrictEqual([...await c.columns()], [
-          { column_name: 'value', data_type: 'numeric', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
-        ]);
 
-        const insertRows = [{ value: Math.PI }, { value: 3.14 }];
-        await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+      describe("numeric types", () => {
+        it("number = numeric", async () => {
+          const c = await db.collection("types", {
+            value: z.number(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'numeric', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+          ]);
+
+          const insertRows = [{ value: Math.PI }, { value: 3.14 }];
+          await c.create(insertRows);
+          assert.deepStrictEqual(await c.select(), insertRows);
+        });
+
+        it("float32 = real", async () => {
+          const c = await db.collection("types", {
+            value: z.float32(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'real', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+          ]);
+        });
+
+        it("float64 = double precision", async () => {
+          const c = await db.collection("types", {
+            value: z.float64(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'double precision', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+          ]);
+        });
       });
 
-      it("float32 = real", async () => {
-        const c = await db.collection("types", {
-          value: z.float32(),
+      describe("string types", () => {
+        it("string = text", async () => {
+          const c = await db.collection("types", {
+            value: z.string(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'text', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+          ]);
         });
-        await c.drop();
-        await c.migrate();
-        assert.deepStrictEqual([...await c.columns()], [
-          { column_name: 'value', data_type: 'real', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
-        ]);
+
+        it("string = varchar(100) with default", async () => {
+          const c = await db.collection("types", {
+            value: z.string().max(100).default("default"),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'character varying', character_maximum_length: 100, column_default: "'default'::character varying", is_nullable: 'NO' },
+          ]);
+        });
+
+        it("string = varchar(100) with default and optional", async () => {
+          const c = await db.collection("types", {
+            value: z.string().max(100).default("default").optional(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'character varying', character_maximum_length: 100, column_default: "'default'::character varying", is_nullable: 'YES' },
+          ]);
+        });
+
       });
 
-      it("float64 = double precision", async () => {
-        const c = await db.collection("types", {
-          value: z.float64(),
+      describe("date types", () => {
+        it("date = timestamp without time zone", async () => {
+          const c = await db.collection("types", {
+            value: z.date(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'timestamp without time zone', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+          ]);
         });
-        await c.drop();
-        await c.migrate();
-        assert.deepStrictEqual([...await c.columns()], [
-          { column_name: 'value', data_type: 'double precision', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
-        ]);
+
+        it("date = timestamp without time zone with default", async () => {
+          const c = await db.collection("types", {
+            value: z.date().default(new Date()),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'timestamp without time zone', character_maximum_length: null, column_default: "now()", is_nullable: 'NO' },
+          ]);
+        });
+
+      });
+
+      describe("uuid types", () => {
+        it("guid = uuid", async () => {
+          const c = await db.collection("types", {
+            value: z.guid().optional(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'uuid', character_maximum_length: null, column_default: "gen_random_uuid()", is_nullable: 'YES' },
+          ]);
+
+          const insertRows = [{ value: "123e4567-e89b-12d3-a456-426614174000" }];
+          await c.create(insertRows);
+          assert.deepStrictEqual(await c.select(), insertRows);
+
+          const newRow = await c.create({});
+          assert.ok(c.parse(newRow).value);
+        });
+
+        it("uuid = uuid", async () => {
+          const c = await db.collection("types", {
+            value: z.uuid(),
+          });
+          await init(c);
+          assert.deepStrictEqual([...await c.columns()], [
+            { column_name: 'value', data_type: 'uuid', character_maximum_length: null, column_default: "gen_random_uuid()", is_nullable: 'NO' },
+          ]);
+
+          const insertRows = [{ value: "123e4567-e89b-12d3-a456-426614174000" }, { value: "123e4567-e89b-12d3-a456-426614174001" }];
+          await c.create(insertRows);
+          assert.deepStrictEqual(await c.select(), insertRows);
+        });
+
       });
     });
 
@@ -316,8 +416,7 @@ describe("collection", () => {
           age: z.number().min(0).max(100),
         });
 
-        await users1.drop();
-        await users1.migrate();
+        await init(users1);
 
         await users1.create([
           { age: 25 },

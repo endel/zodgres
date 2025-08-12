@@ -2,7 +2,7 @@
 
 A tiny wrapper on top of Postgres.js with type-safe schema validation using Zod.
 
-This is not an ORM, and never will be.
+This is not an ORM! It is just a thin layer on top of [Postgres.js](https://github.com/porsager/postgres).
 
 ## Features
 
@@ -145,7 +145,7 @@ await items.migrate();
 The library supports in-memory databases for fast testing:
 
 ```typescript
-import { connect, z } from '@colyseus/collection';
+import { connect, z } from 'zodgres';
 
 describe('My tests', () => {
   let db;
