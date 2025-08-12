@@ -146,14 +146,7 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
     } else {
       // Get existing columns
-      const existingColumns = await this.sql`
-        SELECT
-          column_name, data_type, character_maximum_length, column_default, is_nullable
-        FROM
-          information_schema.columns
-        WHERE
-          table_name = ${this.name}
-      `;
+      const existingColumns = await this.columns();
 
       // Compare and alter table if needed
       await this.alterTable(existingColumns, zodSchema);
@@ -162,6 +155,17 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
 
   public async drop() {
     await this.sql`DROP TABLE IF EXISTS ${this.sql.unsafe(this.name)}`;
+  }
+
+  public async columns() {
+    return await this.sql`
+        SELECT
+          column_name, data_type, character_maximum_length, column_default, is_nullable
+        FROM
+          information_schema.columns
+        WHERE
+          table_name = ${this.name}
+      `;
   }
 
   private zodToTableSchema() {
@@ -226,7 +230,14 @@ export class Collection<T extends zod.core.$ZodLooseShape> {
         return { type: 'INTEGER', nullable, default: defaultValue };
 
       case 'number':
-        return { type: 'DECIMAL', nullable, default: defaultValue };
+        switch ((zodProperty.def as zod.ZodNumber).format) {
+          case 'float32':
+            return { type: 'REAL', nullable, default: defaultValue };
+          case 'float64':
+            return { type: 'DOUBLE PRECISION', nullable, default: defaultValue };
+          default:
+            return { type: 'DECIMAL', nullable, default: defaultValue };
+        }
 
       case 'boolean':
         return { type: 'BOOLEAN', nullable, default: defaultValue };

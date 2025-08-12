@@ -272,24 +272,36 @@ describe("collection", () => {
 
     describe("field types", () => {
       it("number = numeric", async () => {
-        const c1 = await db.collection("types", {
-          age: z.number().min(0).max(100),
+        const c = await db.collection("types", {
+          value: z.number(),
         });
-        await c1.drop();
-        await c1.migrate();
+        await c.drop();
+        await c.migrate();
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: 'numeric', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
+      });
 
-        assert.deepStrictEqual(c1.schema.age, {
-          type: 'DECIMAL',
-          maxLength: undefined,
-          default: undefined,
-          nullable: false
+      it("float32 = real", async () => {
+        const c = await db.collection("types", {
+          value: z.float32(),
         });
+        await c.drop();
+        await c.migrate();
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: 'real', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
+      });
 
-        const c2 = await db.collection("types", {
-          age: z.number().min(0).max(100),
+      it("float64 = double precision", async () => {
+        const c = await db.collection("types", {
+          value: z.float64(),
         });
-
-        assert.deepStrictEqual(c2.schema, c1.schema);
+        await c.drop();
+        await c.migrate();
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: 'double precision', character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
       });
     });
 
