@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import * as zod from 'zod';
+import { zodToMappedType, zodUnwrapType } from './typemap.js';
 
 const DEFAULT_METHODS = ['now()', 'gen_random_uuid()',];
 
@@ -44,7 +45,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
       // validate each input
       for (const input of inputOrInputs) {
-        dataArray.push(this.zod.parse(input));
+        dataArray.push(this.parseWithDefaults(input));
       }
 
       if (dataArray.length === 0) {
@@ -52,7 +53,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       }
 
       const results = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`;
-      return results.map((result: any, index: number) => ({ ...result, ...dataArray[index] })) as this['Type'][];
+      return results.map((result: any, index: number) => ({ ...result, ...inputOrInputs[index] })) as this['Type'][];
 
     } else {
       // handle single input
@@ -210,27 +211,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }
 
   private zodToPostgresType(zodProperty: zod.ZodType): {type: string, nullable: boolean, default?: any} {
-    let nullable = false;
-    let defaultValue: any = undefined;
-    let currentType: any = zodProperty;
-
-    // Handle wrapped types (Optional, Nullable, Default)
-    while (currentType) {
-      if (currentType instanceof zod.ZodOptional) {
-        nullable = true;
-        currentType = currentType.unwrap();
-      } else if (currentType instanceof zod.ZodNullable) {
-        nullable = true;
-        currentType = currentType.unwrap();
-      } else if (currentType instanceof zod.ZodDefault) {
-        defaultValue = typeof currentType.def.defaultValue === 'function'
-          ? currentType.def.defaultValue()
-          : currentType.def.defaultValue;
-        currentType = currentType.def.innerType;
-      } else {
-        break;
-      }
-    }
+    const { type: currentType, nullable, defaultValue } = zodUnwrapType(zodProperty);
 
     // Map Zod types directly to PostgreSQL types
     if (currentType instanceof zod.ZodString) {
@@ -324,8 +305,6 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     const createTableSQL = `CREATE TABLE ${this.name} (${columns})`;
 
-    // console.log('Creating table:', createTableSQL);
-
     await this.sql.unsafe(createTableSQL);
 
     // Populate internal schema
@@ -342,29 +321,24 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       });
     });
 
-    // console.log("EXISTING COLUMNS:", existingColumns);
-
     // Add new columns
+    let alterTableCommands: string[] = [];
     for (const [columnName, columnDef] of Object.entries(newSchema)) {
       if (!existingColumnMap.has(columnName)) {
         const columnDefinition = this.buildColumnDefinition(columnName, columnDef);
-        const addColumnSQL = `ALTER TABLE ${this.name} ADD COLUMN ${columnDefinition}`;
+        alterTableCommands.push(`ADD COLUMN ${columnDefinition}`);
 
-        console.log('Adding column:', addColumnSQL);
-        await this.sql.unsafe(addColumnSQL);
-
-      } else if (existingColumnMap.get(columnName)?.type !== columnDef.type) {
-
-        // console.log("EXISTING COLUMN:", {
-        //   columnName,
-        //   existing: existingColumnMap.get(columnName),
-        //   new: columnDef,
-        // });
-
-        const alterColumnSQL = `ALTER TABLE ${this.name} ALTER COLUMN ${columnName} TYPE ${columnDef.type}`;
-        // console.log('Altering column:', alterColumnSQL);
-        // await this.sql.unsafe(alterColumnSQL);
+      } else {
+        if (existingColumnMap.get(columnName)?.type !== zodToMappedType(columnName, this.zod.shape[columnName])) {
+          const newColumnDef = this.zodToPostgresType(this.zod.shape[columnName])
+          alterTableCommands.push(`ALTER COLUMN ${columnName} TYPE ${newColumnDef.type}`);
+        }
       }
+    }
+
+    if (alterTableCommands.length > 0) {
+      // console.log(`ALTER TABLE ${this.name} ${alterTableCommands.join(', ')}`);
+      await this.sql.unsafe(`ALTER TABLE ${this.name} ${alterTableCommands.join(', ')}`);
     }
 
     // Populate internal schema with existing columns and new schema
@@ -505,6 +479,24 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       : [`${prefix} ${modifiedFirstRawString}`, ...finalRawStrings];
 
     return Object.assign(newStrings, { raw: newRawStrings }) as TemplateStringsArray;
+  }
+
+  protected parseWithDefaults(input: zod.input<typeof this.zod>): this['Type'] {
+    const withDefaults: any = this.zod.parse(input);
+
+    for (const [fieldName, zodType] of Object.entries(this.zod.shape)) {
+      if (!(fieldName in withDefaults) && fieldName !== 'id') {
+        const { defaultValue, nullable } = zodUnwrapType(zodType as zod.ZodType);
+        if (defaultValue !== undefined) {
+          withDefaults[fieldName] = defaultValue;
+
+        } else if (nullable) {
+          withDefaults[fieldName] = this.sql.unsafe('DEFAULT');
+        }
+      }
+    }
+
+    return withDefaults as this['Type'];
   }
 
 }

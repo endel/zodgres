@@ -1,0 +1,4 @@
+[ ] Support "unique" column modifier
+[ ] Add tests for JSONB Type
+[ ] Basic key/value support: https://www.postgresql.org/docs/current/hstore.html
+[ ] Improve TypeScript inference for provided field names in queries (?)
