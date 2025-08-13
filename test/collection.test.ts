@@ -272,12 +272,13 @@ describe("collection", () => {
       it("should return the number of deleted records", async () => {
         const items = await getItemsCollection();
         await items.create([{ name: "One" }, { name: "Two" }]);
-        assert.deepStrictEqual(await items.delete(), 2);
 
-        // allow DELETE RETURNING *
+        assert.strictEqual(await items.count(), 2);
 
-        const all = await items.select();
-        assert.deepStrictEqual(all, []);
+        const deleted = await items.delete`*`;
+        assert.deepStrictEqual(deleted, 2);
+
+        assert.strictEqual(await items.count(), 0);
       });
     });
 

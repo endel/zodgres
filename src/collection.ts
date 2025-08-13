@@ -75,13 +75,10 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
   ): Promise<this['Type'][]> {
-    // SQL keywords that should come after the FROM clause
-    const afterFromKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i;
-
     const newStrings = this.buildSqlTemplateStrings(
       strings,
       'SELECT',
-      afterFromKeywords,
+      /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, // SQL keywords that should come after the FROM clause
       'FROM'
     );
 
@@ -122,13 +119,10 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray,
     ...values: any[]
   ): Promise<this['Type'][]> {
-    // SQL keywords that should come after the SET clause
-    const afterSetKeywords = /\b(WHERE|ORDER\s+BY|LIMIT|OFFSET)\b/i;
-
     const newStrings = this.buildSqlTemplateStrings(
       strings,
       'UPDATE',
-      afterSetKeywords,
+      /\b(WHERE|ORDER\s+BY|LIMIT|OFFSET)\b/i, // SQL keywords that should come after the SET clause
       'SET',
       'RETURNING *'
     );
@@ -142,12 +136,28 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }
 
   public async delete(
-    strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
+    strings: TemplateStringsArray = Object.assign([""], { raw: [""] }),
     ...values: any[]
   ): Promise<number> {
-    const newStrings = this.buildSqlTemplateStrings(strings, 'DELETE', /WHERE/i, 'FROM', 'RETURNING 1');
+    const newStrings = this.buildSqlTemplateStrings(
+      strings,
+      'DELETE',
+      /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, // SQL keywords that should come after the FROM clause,
+      'FROM',
+    );
+
     const result = await this.sql(newStrings, ...values);
-    return result[0]?.count ?? 0;
+
+    return result.count ?? 0;
+  }
+
+  public async count(
+    strings: TemplateStringsArray = Object.assign([""], { raw: [""] }),
+    ...values: any[]
+  ): Promise<number> {
+    const newStrings = this.buildSqlTemplateStrings(strings, 'SELECT COUNT(*)', /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, 'FROM');
+    const result = await this.sql(newStrings, ...values);
+    return (result[0] && parseInt(result[0].count)) ?? 0;
   }
 
   public async migrate() {
