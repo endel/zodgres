@@ -29,7 +29,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }
 
   /**
-   * Insert is an alias for create.
+   * Allow "insert" to call raw INSERT sql instead, just like "update" and "delete".
    */
   public insert = this.create;
 

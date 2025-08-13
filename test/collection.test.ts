@@ -35,248 +35,252 @@ describe("collection", () => {
     return users;
   };
 
-  describe("insert", () => {
-    it("auto-incrementing id", async () => {
-      const users = await getUsersCollection();
+  describe("methods", () => {
 
-      const user1 = await users.create({ name: "Endel Dreyer" });
-      assert.deepStrictEqual(user1, { id: 1, name: "Endel Dreyer", age: null });
+    describe("insert", () => {
+      it("auto-incrementing id", async () => {
+        const users = await getUsersCollection();
 
-      const user2 = await users.create({ name: "Steve Jobs", age: 56 });
-      assert.deepStrictEqual(user2, { id: 2, name: "Steve Jobs", age: 56 });
-    });
+        const user1 = await users.create({ name: "Endel Dreyer" });
+        assert.deepStrictEqual(user1, { id: 1, name: "Endel Dreyer", age: null });
 
-    it("multiple items", async () => {
-      const users = await getUsersCollection();
-
-      // allow to create multiple records at once
-      const all = await users.create([
-        { name: "Endel Dreyer" },
-        { name: "Steve Jobs", age: 56 },
-      ]);
-
-      assert.deepStrictEqual(all, [
-        { id: 1, name: "Endel Dreyer", age: null },
-        { id: 2, name: "Steve Jobs", age: 56 },
-      ]);
-    });
-  });
-
-  describe("select", async () => {
-    it("should select all", async () => {
-      const items = await getItemsCollection();
-
-      // allow to create multiple records at once
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-        { name: "Four" },
-      ]);
-
-      const all = await items.select`*`;
-      assert.deepStrictEqual(all, [
-        { id: 1, name: "One" },
-        { id: 2, name: "Two" },
-        { id: 3, name: "Three" },
-        { id: 4, name: "Four" },
-      ]);
-    });
-
-    it("should accept no arguments", async () => {
-      const items = await getItemsCollection();
-
-      // allow to create multiple records at once
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-        { name: "Four" },
-      ]);
-
-      const all = await items.select();
-
-      assert.deepStrictEqual(all, [
-        { id: 1, name: "One" },
-        { id: 2, name: "Two" },
-        { id: 3, name: "Three" },
-        { id: 4, name: "Four" },
-      ]);
-    });
-
-  });
-
-  describe("select one", () => {
-    it("without explicit limit", async () => {
-      const items = await getItemsCollection();
-
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-        { name: "Four" },
-      ]);
-
-      const one = await items.selectOne`*`;
-      assert.deepStrictEqual(one, { id: 1, name: "One" });
-    });
-
-    it("should throw if LIMIT is present", async () => {
-      const items = await getItemsCollection();
-      assert.rejects(() => items.selectOne`* LIMIT 1`, /LIMIT/i);
-    });
-  });
-
-  describe("select where", () => {
-    it("should select with conditions", async () => {
-      const items = await getItemsCollection();
-
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-        { name: "Four" },
-      ]);
-
-      const three = await items.select`* WHERE name = ${"Three"}`;
-      assert.deepStrictEqual(three, [{ id: 3, name: "Three" }]);
-    });
-
-  });
-
-  describe("update", () => {
-    it("should update with basic SET clause", async () => {
-      const items = await getItemsCollection();
-
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-        { name: "Four" },
-      ]);
-
-      // Update all records with same name
-      const updated = await items.update`name = ${"Updated"} WHERE id = ${2}`;
-      assert.deepStrictEqual(updated, [{ id: 2, name: "Updated" }]);
-
-      // Verify the update worked
-      const all = await items.select`* ORDER BY id`;
-      assert.deepStrictEqual(all, [
-        { id: 1, name: "One" },
-        { id: 2, name: "Updated" },
-        { id: 3, name: "Three" },
-        { id: 4, name: "Four" },
-      ]);
-    });
-
-    it("should update multiple records with WHERE condition", async () => {
-      const items = await getItemsCollection();
-
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-        { name: "Four" },
-      ]);
-
-      // Update multiple records
-      const updated = await items.update`name = ${"Multi-Updated"} WHERE id IN (${1}, ${3})`;
-      // Sort by id for consistent comparison
-      updated.sort((a, b) => (a.id as number) - (b.id as number));
-      assert.deepStrictEqual(updated, [
-        { id: 1, name: "Multi-Updated" },
-        { id: 3, name: "Multi-Updated" },
-      ]);
-
-      // Verify the updates worked
-      const all = await items.select`* ORDER BY id`;
-      assert.deepStrictEqual(all, [
-        { id: 1, name: "Multi-Updated" },
-        { id: 2, name: "Two" },
-        { id: 3, name: "Multi-Updated" },
-        { id: 4, name: "Four" },
-      ]);
-    });
-
-    it("should update without WHERE clause (update all)", async () => {
-      const items = await getItemsCollection();
-
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-        { name: "Three" },
-      ]);
-
-      // Update all records
-      const updated = await items.update`name = ${"All Updated"}`;
-      // Sort by id for consistent comparison
-      updated.sort((a, b) => (a.id as number) - (b.id as number));
-      assert.deepStrictEqual(updated, [
-        { id: 1, name: "All Updated" },
-        { id: 2, name: "All Updated" },
-        { id: 3, name: "All Updated" },
-      ]);
-    });
-
-    it("should work with complex collections", async () => {
-      const users = await db.collection("update_users", {
-        id: z.number().optional(),
-        name: z.string().max(100),
-        age: z.number().min(0).max(100).optional(),
-        active: z.boolean().optional(),
+        const user2 = await users.create({ name: "Steve Jobs", age: 56 });
+        assert.deepStrictEqual(user2, { id: 2, name: "Steve Jobs", age: 56 });
       });
 
-      await init(users);
+      it("multiple items", async () => {
+        const users = await getUsersCollection();
 
-      await users.create([
-        { name: "Alice", age: 25, active: true },
-        { name: "Bob", age: 30, active: false },
-        { name: "Charlie", age: 35, active: true },
-      ]);
+        // allow to create multiple records at once
+        const all = await users.create([
+          { name: "Endel Dreyer" },
+          { name: "Steve Jobs", age: 56 },
+        ]);
 
-      // Update specific fields with multiple conditions
-      const updated = await users.update`age = ${31}, active = ${true} WHERE name = ${"Bob"}`;
-      assert.deepStrictEqual(updated, [
-        { id: 2, name: "Bob", age: 31, active: true },
-      ]);
-
-      // Verify Bob was updated correctly
-      const bob = await users.select`* WHERE name = ${"Bob"}`;
-      assert.deepStrictEqual(bob, [{ id: 2, name: "Bob", age: 31, active: true }]);
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "Endel Dreyer", age: null },
+          { id: 2, name: "Steve Jobs", age: 56 },
+        ]);
+      });
     });
 
-    it("should return empty array when no records match WHERE condition", async () => {
-      const items = await getItemsCollection();
+    describe("select", async () => {
+      it("should select all", async () => {
+        const items = await getItemsCollection();
 
-      await items.create([
-        { name: "One" },
-        { name: "Two" },
-      ]);
+        // allow to create multiple records at once
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+          { name: "Four" },
+        ]);
 
-      // Try to update non-existent record
-      const updated = await items.update`name = ${"Updated"} WHERE id = ${999}`;
-      assert.deepStrictEqual(updated, []);
+        const all = await items.select`*`;
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "One" },
+          { id: 2, name: "Two" },
+          { id: 3, name: "Three" },
+          { id: 4, name: "Four" },
+        ]);
+      });
 
-      // Verify original records are unchanged
-      const all = await items.select`* ORDER BY id`;
-      assert.deepStrictEqual(all, [
-        { id: 1, name: "One" },
-        { id: 2, name: "Two" },
-      ]);
+      it("should accept no arguments", async () => {
+        const items = await getItemsCollection();
+
+        // allow to create multiple records at once
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+          { name: "Four" },
+        ]);
+
+        const all = await items.select();
+
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "One" },
+          { id: 2, name: "Two" },
+          { id: 3, name: "Three" },
+          { id: 4, name: "Four" },
+        ]);
+      });
+
     });
-  });
 
-  describe("delete", () => {
-    it("should return the number of deleted records", async () => {
-      const items = await getItemsCollection();
-      await items.create([{ name: "One" }, { name: "Two" }]);
-      assert.deepStrictEqual(await items.delete(), 2);
+    describe("select one", () => {
+      it("without explicit limit", async () => {
+        const items = await getItemsCollection();
 
-      // allow DELETE RETURNING *
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+          { name: "Four" },
+        ]);
 
-      const all = await items.select();
-      assert.deepStrictEqual(all, []);
+        const one = await items.selectOne`*`;
+        assert.deepStrictEqual(one, { id: 1, name: "One" });
+      });
+
+      it("should throw if LIMIT is present", async () => {
+        const items = await getItemsCollection();
+        assert.rejects(() => items.selectOne`* LIMIT 1`, /LIMIT/i);
+      });
     });
+
+    describe("select where", () => {
+      it("should select with conditions", async () => {
+        const items = await getItemsCollection();
+
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+          { name: "Four" },
+        ]);
+
+        const three = await items.select`* WHERE name = ${"Three"}`;
+        assert.deepStrictEqual(three, [{ id: 3, name: "Three" }]);
+      });
+
+    });
+
+    describe("update", () => {
+      it("should update with basic SET clause", async () => {
+        const items = await getItemsCollection();
+
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+          { name: "Four" },
+        ]);
+
+        // Update all records with same name
+        const updated = await items.update`name = ${"Updated"} WHERE id = ${2}`;
+        assert.deepStrictEqual(updated, [{ id: 2, name: "Updated" }]);
+
+        // Verify the update worked
+        const all = await items.select`* ORDER BY id`;
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "One" },
+          { id: 2, name: "Updated" },
+          { id: 3, name: "Three" },
+          { id: 4, name: "Four" },
+        ]);
+      });
+
+      it("should update multiple records with WHERE condition", async () => {
+        const items = await getItemsCollection();
+
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+          { name: "Four" },
+        ]);
+
+        // Update multiple records
+        const updated = await items.update`name = ${"Multi-Updated"} WHERE id IN (${1}, ${3})`;
+        // Sort by id for consistent comparison
+        updated.sort((a, b) => (a.id as number) - (b.id as number));
+        assert.deepStrictEqual(updated, [
+          { id: 1, name: "Multi-Updated" },
+          { id: 3, name: "Multi-Updated" },
+        ]);
+
+        // Verify the updates worked
+        const all = await items.select`* ORDER BY id`;
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "Multi-Updated" },
+          { id: 2, name: "Two" },
+          { id: 3, name: "Multi-Updated" },
+          { id: 4, name: "Four" },
+        ]);
+      });
+
+      it("should update without WHERE clause (update all)", async () => {
+        const items = await getItemsCollection();
+
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+          { name: "Three" },
+        ]);
+
+        // Update all records
+        const updated = await items.update`name = ${"All Updated"}`;
+        // Sort by id for consistent comparison
+        updated.sort((a, b) => (a.id as number) - (b.id as number));
+        assert.deepStrictEqual(updated, [
+          { id: 1, name: "All Updated" },
+          { id: 2, name: "All Updated" },
+          { id: 3, name: "All Updated" },
+        ]);
+      });
+
+      it("should work with complex collections", async () => {
+        const users = await db.collection("update_users", {
+          id: z.number().optional(),
+          name: z.string().max(100),
+          age: z.number().min(0).max(100).optional(),
+          active: z.boolean().optional(),
+        });
+
+        await init(users);
+
+        await users.create([
+          { name: "Alice", age: 25, active: true },
+          { name: "Bob", age: 30, active: false },
+          { name: "Charlie", age: 35, active: true },
+        ]);
+
+        // Update specific fields with multiple conditions
+        const updated = await users.update`age = ${31}, active = ${true} WHERE name = ${"Bob"}`;
+        assert.deepStrictEqual(updated, [
+          { id: 2, name: "Bob", age: 31, active: true },
+        ]);
+
+        // Verify Bob was updated correctly
+        const bob = await users.select`* WHERE name = ${"Bob"}`;
+        assert.deepStrictEqual(bob, [{ id: 2, name: "Bob", age: 31, active: true }]);
+      });
+
+      it("should return empty array when no records match WHERE condition", async () => {
+        const items = await getItemsCollection();
+
+        await items.create([
+          { name: "One" },
+          { name: "Two" },
+        ]);
+
+        // Try to update non-existent record
+        const updated = await items.update`name = ${"Updated"} WHERE id = ${999}`;
+        assert.deepStrictEqual(updated, []);
+
+        // Verify original records are unchanged
+        const all = await items.select`* ORDER BY id`;
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "One" },
+          { id: 2, name: "Two" },
+        ]);
+      });
+    });
+
+    describe("delete", () => {
+      it("should return the number of deleted records", async () => {
+        const items = await getItemsCollection();
+        await items.create([{ name: "One" }, { name: "Two" }]);
+        assert.deepStrictEqual(await items.delete(), 2);
+
+        // allow DELETE RETURNING *
+
+        const all = await items.select();
+        assert.deepStrictEqual(all, []);
+      });
+    });
+
   });
 
   describe("migrations", () => {
@@ -284,7 +288,7 @@ describe("collection", () => {
 
       describe("numeric types", () => {
         it("number = numeric", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("numeric_types", {
             value: z.number(),
           });
           await init(c);
@@ -298,7 +302,7 @@ describe("collection", () => {
         });
 
         it("float32 = real", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("numeric_types", {
             value: z.float32(),
           });
           await init(c);
@@ -308,7 +312,7 @@ describe("collection", () => {
         });
 
         it("float64 = double precision", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("numeric_types", {
             value: z.float64(),
           });
           await init(c);
@@ -320,7 +324,7 @@ describe("collection", () => {
 
       describe("string types", () => {
         it("string = text", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("string_types", {
             value: z.string(),
           });
           await init(c);
@@ -330,7 +334,7 @@ describe("collection", () => {
         });
 
         it("string = varchar(100) with default", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("string_types", {
             value: z.string().max(100).default("default"),
           });
           await init(c);
@@ -340,7 +344,7 @@ describe("collection", () => {
         });
 
         it("string = varchar(100) with default and optional", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("string_types", {
             value: z.string().max(100).default("default").optional(),
           });
           await init(c);
@@ -353,7 +357,7 @@ describe("collection", () => {
 
       describe("date types", () => {
         it("date = timestamp without time zone", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("date_types", {
             value: z.date(),
           });
           await init(c);
@@ -363,7 +367,7 @@ describe("collection", () => {
         });
 
         it("date = timestamp without time zone with default", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("date_types", {
             value: z.date().default(new Date()),
           });
           await init(c);
@@ -376,7 +380,7 @@ describe("collection", () => {
 
       describe("uuid types", () => {
         it("guid = uuid", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("uuid_types", {
             value: z.guid().optional(),
           });
           await init(c);
@@ -393,7 +397,7 @@ describe("collection", () => {
         });
 
         it("uuid = uuid", async () => {
-          const c = await db.collection("types", {
+          const c = await db.collection("uuid_types", {
             value: z.uuid(),
           });
           await init(c);
