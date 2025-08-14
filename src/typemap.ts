@@ -11,6 +11,14 @@ export const typemap = {
     float64: "double precision",
     boolean: "boolean",
 
+    array: "jsonb",
+    object: "jsonb",
+    record: "jsonb",
+    map: "jsonb",
+    any: "jsonb",
+    // literal: "text",
+    // union: "text",
+
     // edge cases
     enum: "USER-DEFINED",
 

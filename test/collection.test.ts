@@ -540,6 +540,67 @@ describe("collection", () => {
 
     });
 
+    describe("JSONB types", () => {
+      it("z.array()", async () => {
+        const c = await db.collection("jsonb_types", {
+          value: z.array(z.string()),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.array, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
+
+        const insertRows = [{ value: ["one", "two", "three"] }];
+        await c.create(insertRows);
+        assert.deepStrictEqual(await c.select(), insertRows);
+      });
+
+      it("z.object()", async () => {
+        const c = await db.collection("jsonb_types", {
+          value: z.object({
+            name: z.string(),
+            age: z.number(),
+          }),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.object, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
+
+        const insertRows = [{ value: { name: "John", age: 30 } }];
+        await c.create(insertRows);
+        assert.deepStrictEqual(await c.select(), insertRows);
+      });
+
+      it("z.record()", async () => {
+        const c = await db.collection("jsonb_types", {
+          value: z.record(z.string(), z.number()),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.record, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
+
+        const insertRows = [{ value: { "John": 30 } }];
+        await c.create(insertRows);
+        assert.deepStrictEqual(await c.select(), insertRows);
+      });
+
+      it("z.any()", async () => {
+        const c = await db.collection("jsonb_types", {
+          value: z.any(),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.any, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+        ]);
+
+        const insertRows = [{ value: "test" }, { value: 123 }, { value: { name: "John", age: 30 } }, { value: { "John": 30 } }];
+        await c.create(insertRows);
+        assert.deepStrictEqual(await c.select(), insertRows);
+      });
+    });
+
   });
 
   describe("unique constraints", () => {

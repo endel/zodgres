@@ -260,10 +260,6 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       return { type: 'JSONB', nullable, default: defaultValue, unique };
 
     } else if (currentType instanceof zod.ZodEnum) {
-      //
-      // TODO:
-      // Create ENUM type based on this.name + columnName with `currentType.options`
-      //
       return { type: 'ENUM', nullable, default: defaultValue, options: currentType.options, unique };
 
     } else if (currentType instanceof zod.ZodLiteral) {
