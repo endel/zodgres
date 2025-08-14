@@ -52,7 +52,7 @@ export class Database {
   ) {
     const collection = new Collection<T>(name, zod.object(shape, params).strict(), this.sql);
     await collection.migrate();
-    return collection
+    return collection;
   }
 
   public async close(options?: { timeout?: number | undefined } | undefined) {
