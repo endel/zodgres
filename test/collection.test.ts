@@ -498,7 +498,7 @@ describe("collection", () => {
     });
 
     describe("enum types", () => {
-      it("enum = custom enum type", async () => {
+      it("create enum type", async () => {
         const c = await db.collection("enum_types", {
           value: z.enum(['electronics', 'books', 'clothing']),
         });
@@ -513,8 +513,84 @@ describe("collection", () => {
         await c.create(insertRows);
         assert.deepStrictEqual(await c.select(), insertRows);
       });
+
+      it("update enum type", async () => {
+        const c = await db.collection("enum_types", {
+          value: z.enum(['electronics', 'books', 'clothing']),
+        });
+
+        await init(c);
+
+        // should reject invalid option
+        assert.rejects(async () => {
+          // @ts-ignore
+          await c.create({ value: "furniture" });
+        }, /Invalid option/);
+
+        const c2 = await db.collection("enum_types", {
+          value: z.enum(['electronics', 'books', 'clothing', 'furniture']),
+        });
+        type EnumCollection = Row<typeof c2>;
+        await init(c2);
+
+        const insertRows: EnumCollection[] = [{ value: "electronics" }, { value: "books" }, { value: "clothing" }, { value: "furniture" }];
+        await c2.create(insertRows);
+        assert.deepStrictEqual(await c2.select(), insertRows);
+      });
+
     });
 
+  });
+
+  describe("unique constraints", () => {
+    it("should create column with unique constraint", async () => {
+      const c = await db.collection("unique_test", {
+        id: z.number().optional(),
+        email: z.string().unique(),
+        username: z.string().max(50).unique(),
+      });
+
+      await init(c);
+
+      // Insert first record - should succeed
+      await c.create({ email: "test@example.com", username: "testuser" });
+
+      // Try to insert duplicate email - should fail
+      await assert.rejects(async () => {
+        await c.create({ email: "test@example.com", username: "differentuser" });
+      }, /duplicate key value violates unique constraint/);
+
+      // Try to insert duplicate username - should fail
+      await assert.rejects(async () => {
+        await c.create({ email: "different@example.com", username: "testuser" });
+      }, /duplicate key value violates unique constraint/);
+
+      // Insert different values - should succeed
+      const record = await c.create({ email: "different@example.com", username: "differentuser" });
+      assert.ok(record.id > 0, "Record should have a valid ID");
+      assert.strictEqual(record.email, "different@example.com");
+      assert.strictEqual(record.username, "differentuser");
+    });
+
+    it("should work with optional unique fields", async () => {
+      const c = await db.collection("unique_optional_test", {
+        id: z.number().optional(),
+        code: z.string().optional().unique(),
+      });
+
+      await init(c);
+
+      // Insert record with code - should succeed
+      await c.create({ code: "ABC123" });
+
+      // Insert record without code - should succeed (NULL values don't conflict)
+      await c.create({});
+
+      // Try to insert duplicate non-null code - should fail
+      await assert.rejects(async () => {
+        await c.create({ code: "ABC123" });
+      }, /duplicate key value violates unique constraint/);
+    });
   });
 
   describe("alter table", () => {

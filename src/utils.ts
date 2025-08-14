@@ -5,6 +5,7 @@ export interface ColumnDefinition {
   nullable: boolean;
   default?: any;
   options?: any;
+  unique?: boolean;
 }
 
 export async function createEnumType(

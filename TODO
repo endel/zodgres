@@ -1,7 +1,8 @@
-[ ] Add tests for ENUM
+[x] Support "unique" column modifier
+[x] Add tests for ENUM
+[ ] .id should be optional only for "create" operations.
 [ ] Add tests for JSONB Type
 [ ] Add tests for Array
 [ ] Add tests for Record
-[ ] Support "unique" column modifier
 [ ] Basic key/value support: https://www.postgresql.org/docs/current/hstore.html
 [ ] Improve TypeScript inference for provided field names in queries (?)

@@ -1,6 +1,7 @@
 import postgres from 'postgres';
 
-import * as zod from 'zod';
+// Import extended Zod with unique() method
+import { zod } from './zod-ext.js';
 export { zod as z };
 
 import { Database } from './db.js';

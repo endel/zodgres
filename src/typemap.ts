@@ -1,4 +1,5 @@
 import * as zod from 'zod';
+import { isUnique } from './zod-ext.js';
 
 export const typemap = {
     number: "numeric",
@@ -21,6 +22,7 @@ export function zodUnwrapType(zodProperty: zod.ZodType) {
     let nullable = false;
     let defaultValue: any = undefined;
     let currentType: any = zodProperty;
+    let unique = isUnique(zodProperty);
 
     // Handle wrapped types (Optional, Nullable, Default)
     while (currentType) {
@@ -44,6 +46,7 @@ export function zodUnwrapType(zodProperty: zod.ZodType) {
         type: currentType,
         nullable,
         defaultValue,
+        unique,
     }
 }
 
