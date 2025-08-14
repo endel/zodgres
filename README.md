@@ -1,6 +1,7 @@
 
 <div align="center">
 <img width="440" height="180" alt="Zod + Postgres" src="https://github.com/endel/zodgres/blob/main/zodgres.png?raw=1">
+<br />
 </div>
 
 A tiny wrapper on top of [Postgres.js](https://github.com/porsager/postgres) with type-safe schema validation using [Zod](https://github.com/colinhacks/zod/).
