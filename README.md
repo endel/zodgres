@@ -1,5 +1,5 @@
 
-<img align="left" width="440" height="180" alt="Zod + Postgres" src="https://raw.githubusercontent.com/endel/zodgres/master/zodgres.png?sanitize=true">
+<img align="left" width="440" height="180" alt="Zod + Postgres" src="https://raw.githubusercontent.com/endel/zodgres/main/zodgres.png?sanitize=true">
 
 A tiny wrapper on top of Postgres.js with type-safe schema validation using Zod.
 
