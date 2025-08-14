@@ -1,6 +1,7 @@
 import postgres from 'postgres';
 import * as zod from 'zod';
 import { zodToMappedType, zodUnwrapType } from './typemap.js';
+import { type ColumnDefinition, createEnumType } from './utils.js';
 
 const DEFAULT_METHODS = ['now()', 'gen_random_uuid()',];
 
@@ -200,8 +201,8 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       `;
   }
 
-  private zodToTableSchema() {
-    const schema: {[key: string]: {type: string, nullable: boolean, default?: any}} = {};
+  protected zodToTableSchema() {
+    const schema: {[key: string]: ColumnDefinition} = {};
 
     for (const field in this.zod.shape) {
       schema[field] = this.zodToPostgresType(this.zod.shape[field] as zod.ZodType);
@@ -210,7 +211,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return schema;
   }
 
-  private zodToPostgresType(zodProperty: zod.ZodType): {type: string, nullable: boolean, default?: any} {
+  protected zodToPostgresType(zodProperty: zod.ZodType): ColumnDefinition {
     const { type: currentType, nullable, defaultValue } = zodUnwrapType(zodProperty);
 
     // Map Zod types directly to PostgreSQL types
@@ -258,8 +259,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       // TODO:
       // Create ENUM type based on this.name + columnName with `currentType.options`
       //
-      console.log("ENUM TYPE", currentType.options);
-      return { type: 'TEXT', nullable, default: defaultValue };
+      return { type: 'ENUM', nullable, default: defaultValue, options: currentType.options };
 
     } else if (currentType instanceof zod.ZodLiteral) {
       return { type: 'TEXT', nullable, default: defaultValue };
@@ -277,8 +277,18 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     }
   }
 
-  private buildColumnDefinition(name: string, def: {type: string, nullable: boolean, default?: any}): string {
+  protected buildColumnDefinition(name: string, def: ColumnDefinition): { def: string, updateDb?: () => Promise<void> } {
     let columnDef = name;
+
+    if (def.type === 'ENUM') {
+      // override the type to the enum type
+      def.type = `${this.name}_${name}`;
+
+      return {
+        def: `${name} ${def.type}`,
+        updateDb: () => createEnumType(this.sql, def)
+      }
+    }
 
     if (name === 'id') {
       columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY`;
@@ -300,13 +310,22 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     }
 
-    return columnDef;
+    return { def: columnDef };
   }
 
-  private async createTable(schema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
-    const columns = Object.entries(schema).map(([name, def]) =>
-      this.buildColumnDefinition(name, def)
-    ).join(', ');
+  protected async createTable(schema: {[key: string]: ColumnDefinition}) {
+    let sqls: Array<() => Promise<void>> = [];
+
+    const columns = Object.entries(schema).map(([name, def]) => {
+      const { def: columnDef, updateDb } = this.buildColumnDefinition(name, def);
+      if (updateDb) { sqls.push(updateDb); }
+      return columnDef;
+    }).join(', ');
+
+    // Create ENUM types first
+    for (const sql of sqls) {
+      await sql();
+    }
 
     const createTableSQL = `CREATE TABLE ${this.name} (${columns})`;
 
@@ -316,7 +335,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     this.populateSchemaFromZod(schema);
   }
 
-  private async alterTable(existingColumns: any[], newSchema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
+  protected async alterTable(existingColumns: any[], newSchema: {[key: string]: ColumnDefinition}) {
     const existingColumnMap = new Map();
     existingColumns.forEach(col => {
       existingColumnMap.set(col.column_name, {
@@ -329,9 +348,14 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     // Add new columns
     let alterTableCommands: string[] = [];
     for (const [columnName, columnDef] of Object.entries(newSchema)) {
+      const sqlDef = this.buildColumnDefinition(columnName, columnDef);
+
+      if (sqlDef.updateDb) {
+        await sqlDef.updateDb();
+      }
+
       if (!existingColumnMap.has(columnName)) {
-        const columnDefinition = this.buildColumnDefinition(columnName, columnDef);
-        alterTableCommands.push(`ADD COLUMN ${columnDefinition}`);
+        alterTableCommands.push(`ADD COLUMN ${sqlDef.def}`);
 
       } else {
         if (existingColumnMap.get(columnName)?.type !== zodToMappedType(columnName, this.zod.shape[columnName])) {
@@ -354,7 +378,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     // This is a safety measure to prevent data loss
   }
 
-  private populateSchemaFromZod(schema: {[key: string]: {type: string, nullable: boolean, default?: any}}) {
+  protected populateSchemaFromZod(schema: {[key: string]: ColumnDefinition}) {
     for (const [columnName, columnDef] of Object.entries(schema)) {
       this.populateSchemaField(columnName, {
         type: columnDef.type,
@@ -365,7 +389,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     }
   }
 
-  private populateSchemaFromExisting(existingColumns: any[]) {
+  protected populateSchemaFromExisting(existingColumns: any[]) {
     existingColumns.forEach((column) => {
       this.populateSchemaField(column.column_name, {
         type: column.data_type,
@@ -376,7 +400,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     });
   }
 
-  private populateSchemaField(
+  protected populateSchemaField(
     columnName: string,
     fieldData: { type: string; maxLength: number | undefined; default: any; nullable: boolean }
   ) {
@@ -388,12 +412,12 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     };
   }
 
-  private extractMaxLengthFromType(type: string): number | undefined {
+  protected extractMaxLengthFromType(type: string): number | undefined {
     const match = type.match(/\((\d+)\)/);
     return match && match[1] ? parseInt(match[1], 10) : undefined;
   }
 
-  private convertRowFromDatabase(row: any): any {
+  protected convertRowFromDatabase(row: any): any {
     // Convert null values to undefined and handle type conversions
     return Object.fromEntries(
       Object.entries(row).map(([key, value]) => {
@@ -421,7 +445,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     );
   }
 
-  private buildSqlTemplateStrings(
+  protected buildSqlTemplateStrings(
     strings: TemplateStringsArray,
     prefix: string,
     keywordRegex: RegExp,

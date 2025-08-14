@@ -10,6 +10,9 @@ export const typemap = {
     float64: "double precision",
     boolean: "boolean",
 
+    // edge cases
+    enum: "USER-DEFINED",
+
     // special case for auto-incrementing id
     id: "integer",
 };

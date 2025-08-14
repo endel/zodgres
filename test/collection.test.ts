@@ -498,7 +498,7 @@ describe("collection", () => {
     });
 
     describe("enum types", () => {
-      it("enum = text", async () => {
+      it("enum = custom enum type", async () => {
         const c = await db.collection("enum_types", {
           value: z.enum(['electronics', 'books', 'clothing']),
         });
@@ -506,7 +506,7 @@ describe("collection", () => {
 
         await init(c);
         assert.deepStrictEqual([...await c.columns()], [
-          { column_name: 'value', data_type: typemap.string, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
+          { column_name: 'value', data_type: typemap.enum, character_maximum_length: null, column_default: null, is_nullable: 'YES' },
         ]);
 
         const insertRows: EnumCollection[] = [{ value: "electronics" }, { value: "books" }, { value: "clothing" }];
