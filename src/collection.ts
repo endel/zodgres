@@ -292,7 +292,12 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     }
 
     if (name === 'id') {
-      columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY`;
+      if (def.type === 'UUID') {
+        columnDef += ` UUID PRIMARY KEY DEFAULT gen_random_uuid()`;
+
+      } else {
+        columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY`;
+      }
 
     } else {
       columnDef += ` ${def.type}`;

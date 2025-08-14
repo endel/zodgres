@@ -12,6 +12,13 @@ describe("collection", () => {
     db = await connect("postgres://postgres:postgres@localhost:5432/postgres", { debug: true });
     // drop collection tables
     await db.sql`DROP TABLE IF EXISTS users`;
+    await db.sql`DROP TABLE IF EXISTS items`;
+    await db.sql`DROP TABLE IF EXISTS uuid_auto_increment`;
+    await db.sql`DROP TABLE IF EXISTS uuid_types`;
+    await db.sql`DROP TABLE IF EXISTS auto_incrementing_test`;
+    await db.sql`DROP TABLE IF EXISTS mixed_objects_test`;
+    await db.sql`DROP TABLE IF EXISTS unique_test`;
+    await db.sql`DROP TABLE IF EXISTS unique_optional_test`;
   })
 
   after(async () => await db.close());
@@ -448,6 +455,20 @@ describe("collection", () => {
     });
 
     describe("uuid types", () => {
+      it("primary key as uuid (auto-incrementing)", async () => {
+        const c = await db.collection("uuid_auto_increment", {
+          id: z.uuid().optional(),
+          name: z.string(),
+        });
+        await init(c);
+
+        await c.create([{ name: "John" }]);
+
+        const rows = await c.select();
+        assert.strictEqual(rows[0]?.id.length, 36);
+        assert.strictEqual(rows[0]?.name, "John");
+      });
+
       it("guid = uuid", async () => {
         const c = await db.collection("uuid_types", {
           value: z.guid().optional(),

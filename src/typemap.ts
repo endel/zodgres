@@ -59,13 +59,26 @@ export function zodUnwrapType(zodProperty: zod.ZodType) {
 }
 
 export function zodToMappedType(columnName: string, zodProperty: zod.ZodType) {
+    const { type } = zodUnwrapType(zodProperty);
+
+    // Check if it's a UUID type regardless of column name
+    if (type instanceof zod.ZodGUID || type instanceof zod.ZodUUID) {
+        return typemap.uuid;
+    }
+
     switch (columnName) {
         case "id":
-            return typemap.id;
+            // For id columns, check the actual type
+            if (type instanceof zod.ZodString && type.maxLength !== null) {
+                return typemap.string_max;
+            } else if (type instanceof zod.ZodNumber) {
+                // For number ID columns, use integer to support IDENTITY
+                return typemap.id;
+            } else {
+                return typemap[type.def.type as keyof typeof typemap] || typemap.id;
+            }
 
         default:
-            const { type } = zodUnwrapType(zodProperty);
-
             if (type instanceof zod.ZodString && type.maxLength !== null) {
                 return typemap.string_max;
 
