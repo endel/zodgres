@@ -1,15 +1,12 @@
-# Zodgres
+
+<img align="left" width="440" height="180" alt="Zod + Postgres" src="https://raw.githubusercontent.com/endel/zodgres/master/zodgres.png?sanitize=true">
 
 A tiny wrapper on top of Postgres.js with type-safe schema validation using Zod.
 
-This is not an ORM! It is just a thin layer on top of [Postgres.js](https://github.com/porsager/postgres).
-
-## Features
-
-- 🔒 **Type-safe** - Full TypeScript support with Zod schema validation
+- 🔒 **Type-safe** - Full TypeScript support with [Zod](https://github.com/colinhacks/zod/) schema validation
 - 🚀 **Simple API** - Collection-based interface for common database operations
 - 📦 **Flexible** - Works with Postgres or in-memory PGLite for testing
-- ⚡ **SQL Templates** - Use SQL template literals for complex queries
+- ⚡ **SQL Templates** - Use [Postgres.js](https://github.com/porsager/postgres) template literals for complex queries
 - 🔄 **Auto-migration** - Automatic table creation from Zod schemas
 
 ## Installation
