@@ -29,8 +29,6 @@ export async function createEnumType(
         const existingLabels = enumShape.map((row: any) => row.enumlabel);
         const missingValues = def.options.filter((option: string) => !existingLabels.includes(option));
 
-        // console.log({existingLabels, missingValues});
-
         for (const option of missingValues) {
             await sql.unsafe(`ALTER TYPE ${def.type} ADD VALUE '${option}'`);
         }

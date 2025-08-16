@@ -20,6 +20,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     default: string;
     nullable: boolean;
     maxLength: number | undefined;
+    zodType: zod.ZodType;
   }} = {};
 
   protected zod: zod.ZodObject<T>;
@@ -280,15 +281,12 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
   protected buildColumnDefinition(name: string, def: ColumnDefinition): { def: string, updateDb?: () => Promise<void> } {
     let columnDef = name;
+    let updateDb: any = undefined;
 
     if (def.type === 'ENUM') {
       // override the type to the enum type
       def.type = `${this.name}_${name}`;
-
-      return {
-        def: `${name} ${def.type}`,
-        updateDb: () => createEnumType(this.sql, def)
-      }
+      updateDb = () => createEnumType(this.sql, def);
     }
 
     if (name === 'id') {
@@ -319,7 +317,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       }
     }
 
-    return { def: columnDef };
+    return { def: columnDef, updateDb };
   }
 
   protected async createTable(schema: {[key: string]: ColumnDefinition}) {
@@ -337,6 +335,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     }
 
     const createTableSQL = `CREATE TABLE ${this.name} (${columns})`;
+    // console.log({ createTableSQL });
 
     await this.sql.unsafe(createTableSQL);
 
@@ -356,6 +355,8 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     // Add new columns
     let alterTableCommands: string[] = [];
+    let preAlterTableCommands: string[] = [];
+
     for (const [columnName, columnDef] of Object.entries(newSchema)) {
       const sqlDef = this.buildColumnDefinition(columnName, columnDef);
 
@@ -367,9 +368,10 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
         alterTableCommands.push(`ADD COLUMN ${sqlDef.def}`);
 
       } else {
-        if (existingColumnMap.get(columnName)?.type !== zodToMappedType(columnName, this.zod.shape[columnName])) {
-          const newColumnDef = this.zodToPostgresType(this.zod.shape[columnName]);
+        const existingColumn = existingColumnMap.get(columnName);
+        const newColumnDef = this.zodToPostgresType(this.zod.shape[columnName]);
 
+        if (existingColumn.type !== zodToMappedType(columnName, this.zod.shape[columnName])) {
           let alterColumnCommand = `ALTER COLUMN ${columnName} TYPE ${columnDef.type}`;
 
           // Add explicit cast if the column is an enum
@@ -377,11 +379,32 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
             alterColumnCommand += ` USING (${columnName}::${columnDef.type})`;
           }
 
-          // console.log("alterColumnCommand", { alterColumnCommand })
-
           alterTableCommands.push(alterColumnCommand);
+
+        } else if (columnName !== 'id' && existingColumn.nullable !== newColumnDef.nullable) {
+          // Allow to switch from nullable to not nullable
+
+          if (!newColumnDef.nullable) {
+            if (newColumnDef.default === undefined) {
+              // Explicitly throw an error if default value is not set
+              throw new Error(`${this.name}: field '${columnName}' must have a default value`);
+
+            } else {
+              // Set default value if the column is not nullable
+              preAlterTableCommands.push(`UPDATE ${this.name} SET ${columnName} = ${newColumnDef.default} WHERE ${columnName} IS NULL`);
+            }
+          }
+
+          alterTableCommands.push(`ALTER COLUMN ${columnName} ${newColumnDef.nullable ? 'DROP NOT NULL' : 'SET NOT NULL'}`);
         }
       }
+    }
+
+    // console.log({ preAlterTableCommands, alterTableCommands });
+
+    // Run pre-alter table commands first (to avoid constraint errors)
+    if (preAlterTableCommands.length > 0) {
+      await this.sql.unsafe(preAlterTableCommands.join('; '));
     }
 
     if (alterTableCommands.length > 0) {
@@ -428,6 +451,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       maxLength: fieldData.maxLength,
       default: fieldData.default,
       nullable: fieldData.nullable,
+      zodType: (zodUnwrapType(this.zod.shape[columnName]).type),
     };
   }
 
@@ -445,13 +469,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
         }
 
         // Get the Zod type for this field to determine if we need type conversion
-        const zodProperty = this.zod.shape[key];
-
-        // Handle ZodOptional by getting the inner type
-        let innerType = zodProperty;
-        if (zodProperty instanceof zod.ZodOptional) {
-          innerType = zodProperty.unwrap();
-        }
+        const innerType = this.schema[key]!.zodType;
 
         // Convert string numbers back to actual numbers for numeric fields
         if (innerType instanceof zod.ZodNumber && typeof value === 'string') {

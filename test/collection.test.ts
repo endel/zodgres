@@ -19,7 +19,9 @@ describe("collection", () => {
     await db.sql`DROP TABLE IF EXISTS mixed_objects_test`;
     await db.sql`DROP TABLE IF EXISTS unique_test`;
     await db.sql`DROP TABLE IF EXISTS unique_optional_test`;
-    await db.sql`DROP TABLE IF EXISTS enum_types`;
+    await db.sql`DROP TABLE IF EXISTS number_to_string`;
+    await db.sql`DROP TABLE IF EXISTS create_enum_type`;
+    await db.sql`DROP TABLE IF EXISTS update_enum_type`;
   })
 
   after(async () => await db.close());
@@ -521,14 +523,14 @@ describe("collection", () => {
 
     describe("enum types", () => {
       it("create enum type", async () => {
-        const c = await db.collection("enum_types", {
+        const c = await db.collection("create_enum_type", {
           value: z.enum(['electronics', 'books', 'clothing']),
         });
         type EnumCollection = Row<typeof c>;
 
         await init(c);
         assert.deepStrictEqual([...await c.columns()], [
-          { column_name: 'value', data_type: typemap.enum, character_maximum_length: null, column_default: null, is_nullable: 'YES' },
+          { column_name: 'value', data_type: typemap.enum, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
 
         const insertRows: EnumCollection[] = [{ value: "electronics" }, { value: "books" }, { value: "clothing" }];
@@ -537,10 +539,9 @@ describe("collection", () => {
       });
 
       it("update enum type", async () => {
-        const c = await db.collection("enum_types", {
+        const c = await db.collection("update_enum_type", {
           value: z.enum(['electronics', 'books', 'clothing']),
         });
-
         await init(c);
 
         // should reject invalid option
@@ -549,7 +550,7 @@ describe("collection", () => {
           await c.create({ value: "furniture" });
         }, /Invalid option/);
 
-        const c2 = await db.collection("enum_types", {
+        const c2 = await db.collection("update_enum_type", {
           value: z.enum(['electronics', 'books', 'clothing', 'furniture']),
         });
         type EnumCollection = Row<typeof c2>;
@@ -678,7 +679,7 @@ describe("collection", () => {
 
   describe("alter table", () => {
     it("should convert integer fields to varchar", async () => {
-      const users1 = await db.collection("users", {
+      const users1 = await db.collection("number_to_string", {
         id: z.number().optional(),
         age: z.number().min(0).max(100),
       });
@@ -692,7 +693,7 @@ describe("collection", () => {
         { id: 2, age: 30 },
       ]);
 
-      const users2 = await db.collection("users", {
+      const users2 = await db.collection("number_to_string", {
         id: z.number().optional(),
         age: z.string(),
       });
@@ -712,16 +713,41 @@ describe("collection", () => {
       await init(c);
 
       await c.create([{ value: "one" }, { value: "two" }, { value: "three" }]);
-      assert.deepStrictEqual(await c.select(), [
+
+      const c2 = await db.collection("text_to_enum", {
+        value: z.enum(['one', 'two', 'three']),
+      });
+
+      assert.deepStrictEqual(await c2.select(), [
         { value: "one" },
         { value: "two" },
         { value: "three" },
       ]);
 
-      const c2 = await db.collection("text_to_enum", {
-        value: z.enum(['one', 'two', 'three']),
+    });
+
+    it("nullable to not null", async () => {
+      const c = await db.collection("nullable_to_not_null", {
+        value: z.number().optional(),
       });
-      await init(c2);
+      await init(c);
+
+      await c.create([{}, {}, { value: 3 }]);
+      assert.deepStrictEqual(await c.select(), [
+        { value: undefined },
+        { value: undefined },
+        { value: 3 },
+      ]);
+
+      const c2 = await db.collection("nullable_to_not_null", {
+        value: z.number().default(0),
+      });
+
+      assert.deepStrictEqual(await c2.select(), [
+        { value: 3 },
+        { value: 0 },
+        { value: 0 },
+      ]);
 
     });
   });
