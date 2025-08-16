@@ -5,7 +5,7 @@
 <br />
 </div>
 
-A tiny wrapper on top of [Postgres.js](https://github.com/porsager/postgres) with type-safe schema validation using [Zod](https://github.com/colinhacks/zod/).
+TypeScript-first database collections with static type inference and automatic migrations. Built on top of [Postgres.js](https://github.com/porsager/postgres) and [Zod](https://github.com/colinhacks/zod/).
 
 - 🔒 **Type-safe** - Full TypeScript support with Zod schema validation
 - 🚀 **Simple API** - Collection-based interface for common database operations

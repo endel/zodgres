@@ -1,0 +1,9 @@
+{
+  "title": "Zodgres Documentation",
+  "pages": [
+    "index",
+    "installation",
+    "collections",
+    "querying"
+  ]
+}

@@ -1,0 +1,137 @@
+---
+title: Introduction
+description: Type-safe Postgres collections with Zod schema validation
+---
+
+<div align="center">
+  <img width="440" height="180" alt="Zod + Postgres" src="https://cdn.jsdelivr.net/gh/endel/zodgres@main/zodgres.png" />
+</div>
+
+TypeScript-first database collections with static type inference and automatic migrations. Built on top of [Postgres.js](https://github.com/porsager/postgres) and [Zod](https://github.com/colinhacks/zod/).
+
+## Introduction
+
+```typescript
+import { connect, z } from 'zodgres';
+
+// Connect to database
+const db = await connect('postgres://user:password@localhost:5432/mydb');
+
+// Define a collection with Zod schema
+const users = await db.collection('users', {
+  id: z.number().optional(), // auto-incrementing
+  name: z.string().max(100),
+  age: z.number().min(0).max(100).optional(),
+});
+
+// Create records
+const user = await users.create({ name: 'John Doe', age: 30 });
+// Result: { id: 1, name: 'John Doe', age: 30 }
+
+// Query records
+const allUsers = await users.select(); // or users.select`*`
+const adults = await users.select`* WHERE age >= ${18}`;
+
+// Close connection
+await db.close();
+```
+
+## Features
+
+- 🔒 **Type-safe** - Full TypeScript support with Zod schema validation
+- 🚀 **Simple API** - Collection-based interface for common database operations
+- 📦 **Flexible** - Works with Postgres or in-memory PGLite for testing
+- ⚡ **SQL Templates** - Use template literals for complex queries
+- 🔄 **Auto-migration** - Automatic table creation from Zod schemas
+
+## Installation
+
+<Tabs items={['npm', 'yarn', 'pnpm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install zodgres
+    ```
+  </Tab>
+  <Tab value="yarn">
+    ```bash
+    yarn add zodgres
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add zodgres
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add zodgres
+    ```
+  </Tab>
+</Tabs>
+
+
+
+## Database Connection
+
+### PostgreSQL Database
+
+Connect using a connection string:
+
+```typescript
+// Local database
+const db = await connect('postgres://postgres:password@localhost:5432/myapp');
+
+// Remote database with options
+const db = await connect('postgres://user:pass@host:5432/db', {
+  max: 10,          // Maximum connections
+  ssl: 'prefer',    // SSL mode
+});
+```
+
+### In-Memory Database
+
+Use PGLite for fast testing without external dependencies:
+
+```typescript
+// Connect to in-memory database
+const db = await connect(':memory:');
+```
+
+<Callout type="info">
+  Install PGLite dependencies for in-memory database support:
+  ```bash
+  npm install @electric-sql/pglite @electric-sql/pglite-socket
+  ```
+</Callout>
+
+### Environment Configuration
+
+Use environment variables for database configuration:
+
+```typescript
+// .env
+DATABASE_URL=postgres://user:password@localhost:5432/mydb
+
+// Application
+const db = await connect(process.env.DATABASE_URL);
+```
+
+### Connection Management
+
+Always close connections properly:
+
+```typescript
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await db.close();
+  process.exit(0);
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Installation" href="/installation" description="Get started with zodgres installation" />
+  <Card title="Collections" href="/collections" description="Create type-safe collections with Zod schemas" />
+  <Card title="Querying" href="/querying" description="Query your data with SQL template literals" />
+</Cards>

@@ -519,6 +519,53 @@ describe("collection", () => {
         await c.create(insertRows);
         assert.deepStrictEqual(await c.select(), insertRows);
       });
+
+      it("boolean with default", async () => {
+        const c = await db.collection("boolean_default_types", {
+          value: z.boolean().default(true),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: 'true', is_nullable: 'NO' },
+        ]);
+
+        await c.create([{}]);
+        assert.deepStrictEqual(await c.select(), [{ value: true }]);
+      });
+
+      it("boolean optional", async () => {
+        const c = await db.collection("boolean_optional_types", {
+          value: z.boolean().optional(),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: null, is_nullable: 'YES' },
+        ]);
+
+        const insertRows = [{ value: true }, { value: false }, {}];
+        await c.create(insertRows);
+        assert.deepStrictEqual(await c.select(), [
+          { value: true },
+          { value: false },
+          { value: undefined }
+        ]);
+      });
+
+      it("boolean with default and optional", async () => {
+        const c = await db.collection("boolean_default_optional_types", {
+          value: z.boolean().default(false).optional(),
+        });
+        await init(c);
+        assert.deepStrictEqual([...await c.columns()], [
+          { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: 'false', is_nullable: 'YES' },
+        ]);
+
+        await c.create([{}, { value: true }]);
+        assert.deepStrictEqual(await c.select(), [
+          { value: false },
+          { value: true }
+        ]);
+      });
     });
 
     describe("enum types", () => {
