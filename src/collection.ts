@@ -368,8 +368,18 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
       } else {
         if (existingColumnMap.get(columnName)?.type !== zodToMappedType(columnName, this.zod.shape[columnName])) {
-          const newColumnDef = this.zodToPostgresType(this.zod.shape[columnName])
-          alterTableCommands.push(`ALTER COLUMN ${columnName} TYPE ${newColumnDef.type}`);
+          const newColumnDef = this.zodToPostgresType(this.zod.shape[columnName]);
+
+          let alterColumnCommand = `ALTER COLUMN ${columnName} TYPE ${columnDef.type}`;
+
+          // Add explicit cast if the column is an enum
+          if (newColumnDef.type === "ENUM") {
+            alterColumnCommand += ` USING (${columnName}::${columnDef.type})`;
+          }
+
+          // console.log("alterColumnCommand", { alterColumnCommand })
+
+          alterTableCommands.push(alterColumnCommand);
         }
       }
     }

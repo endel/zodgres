@@ -19,6 +19,7 @@ describe("collection", () => {
     await db.sql`DROP TABLE IF EXISTS mixed_objects_test`;
     await db.sql`DROP TABLE IF EXISTS unique_test`;
     await db.sql`DROP TABLE IF EXISTS unique_optional_test`;
+    await db.sql`DROP TABLE IF EXISTS enum_types`;
   })
 
   after(async () => await db.close());
@@ -702,6 +703,26 @@ describe("collection", () => {
         { id: 1, age: "25 updated!" },
         { id: 2, age: "30 updated!" },
       ]);
+    });
+
+    it("should convert string field to enum", async () => {
+      const c = await db.collection("text_to_enum", {
+        value: z.string().max(100)
+      });
+      await init(c);
+
+      await c.create([{ value: "one" }, { value: "two" }, { value: "three" }]);
+      assert.deepStrictEqual(await c.select(), [
+        { value: "one" },
+        { value: "two" },
+        { value: "three" },
+      ]);
+
+      const c2 = await db.collection("text_to_enum", {
+        value: z.enum(['one', 'two', 'three']),
+      });
+      await init(c2);
+
     });
   });
 

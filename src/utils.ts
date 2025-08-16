@@ -16,7 +16,7 @@ export async function createEnumType(
     const enumExists = await sql.unsafe(`SELECT 1 FROM pg_type WHERE typname = '${def.type}'`);
 
     // check enum shape
-    if (enumExists) {
+    if (enumExists.length > 0) {
         const enumShape = await sql.unsafe(`
             SELECT enumlabel
             FROM pg_enum e
@@ -28,6 +28,8 @@ export async function createEnumType(
         // compare and add new values to the enum
         const existingLabels = enumShape.map((row: any) => row.enumlabel);
         const missingValues = def.options.filter((option: string) => !existingLabels.includes(option));
+
+        // console.log({existingLabels, missingValues});
 
         for (const option of missingValues) {
             await sql.unsafe(`ALTER TYPE ${def.type} ADD VALUE '${option}'`);
