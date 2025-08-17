@@ -11,18 +11,18 @@ describe("collection", () => {
   before(async () => {
     db = await connect("postgres://postgres:postgres@localhost:5432/postgres"); // , { debug: true }
     // drop collection tables
-    await db.sql`DROP TABLE IF EXISTS users`;
-    await db.sql`DROP TABLE IF EXISTS items`;
-    await db.sql`DROP TABLE IF EXISTS uuid_auto_increment`;
-    await db.sql`DROP TABLE IF EXISTS uuid_types`;
-    await db.sql`DROP TABLE IF EXISTS auto_incrementing_test`;
-    await db.sql`DROP TABLE IF EXISTS mixed_objects_test`;
-    await db.sql`DROP TABLE IF EXISTS unique_test`;
-    await db.sql`DROP TABLE IF EXISTS unique_optional_test`;
-    await db.sql`DROP TABLE IF EXISTS number_to_string`;
-    await db.sql`DROP TABLE IF EXISTS create_enum_type`;
-    await db.sql`DROP TABLE IF EXISTS update_enum_type`;
-    await db.sql`DROP TABLE IF EXISTS arbitrary_columns`;
+    await db.raw`DROP TABLE IF EXISTS users`;
+    await db.raw`DROP TABLE IF EXISTS items`;
+    await db.raw`DROP TABLE IF EXISTS uuid_auto_increment`;
+    await db.raw`DROP TABLE IF EXISTS uuid_types`;
+    await db.raw`DROP TABLE IF EXISTS auto_incrementing_test`;
+    await db.raw`DROP TABLE IF EXISTS mixed_objects_test`;
+    await db.raw`DROP TABLE IF EXISTS unique_test`;
+    await db.raw`DROP TABLE IF EXISTS unique_optional_test`;
+    await db.raw`DROP TABLE IF EXISTS number_to_string`;
+    await db.raw`DROP TABLE IF EXISTS create_enum_type`;
+    await db.raw`DROP TABLE IF EXISTS update_enum_type`;
+    await db.raw`DROP TABLE IF EXISTS arbitrary_columns`;
   })
 
   after(async () => await db.close());

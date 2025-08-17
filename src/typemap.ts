@@ -1,5 +1,7 @@
 import * as zod from 'zod';
+import type postgres from 'postgres';
 import { isUnique } from './zod-ext.js';
+import { Collection } from './collection.js';
 
 export const typemap = {
     number: "numeric",
@@ -86,4 +88,14 @@ export function zodToMappedType(columnName: string, zodProperty: zod.ZodType) {
                 return typemap[type.def.type as keyof typeof typemap] || typemap.string;
             }
     }
+}
+
+export function processSQLValues(sql: ReturnType<typeof postgres>, values: any[]): any[] {
+    return values.map(value => {
+        if (value instanceof Collection) {
+            // Return the table name directly (no quotes)
+            return sql.unsafe(value.name);
+        }
+        return value;
+    });
 }

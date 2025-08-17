@@ -2,6 +2,7 @@ import postgres from 'postgres';
 import * as zod from 'zod';
 import { zodToMappedType, zodUnwrapType } from './typemap.js';
 import { type ColumnDefinition, createEnumType } from './utils.js';
+import { processSQLValues } from './typemap.js';
 
 const DEFAULT_METHODS = ['now()', 'gen_random_uuid()',];
 
@@ -48,7 +49,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       'RETURNING *'
     );
 
-    const result = await this.sql(newStrings, ...values);
+    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
 
     return result.map((row: any, _: number) =>
       this.convertRowFromDatabase(row)) as R[];
@@ -103,7 +104,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       'FROM'
     );
 
-    const result = await this.sql(newStrings, ...values);
+    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
 
     return result.map((row: any, _: number) =>
       this.convertRowFromDatabase(row)) as R[];
@@ -146,7 +147,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       'RETURNING *'
     );
 
-    const result = await this.sql(newStrings, ...values);
+    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
 
     return result.map((row: any, _: number) =>
       this.convertRowFromDatabase(row)) as R[];
@@ -166,7 +167,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       'FROM',
     );
 
-    const result = await this.sql(newStrings, ...values);
+    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
 
     return (result.length > 0)
       ? [...result] as R[]
@@ -178,7 +179,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     ...values: any[]
   ): Promise<number> {
     const newStrings = this.buildSqlTemplateStrings(strings, 'SELECT COUNT(*)', /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, 'FROM');
-    const result = await this.sql(newStrings, ...values);
+    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
     return (result[0] && parseInt(result[0].count)) ?? 0;
   }
 

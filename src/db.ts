@@ -3,9 +3,10 @@ import * as zod from 'zod';
 
 import { usePglite } from './pglite.js';
 import { Collection } from './collection.js';
+import { processSQLValues } from './typemap.js';
 
 export class Database {
-  public sql!: ReturnType<typeof postgres>;
+  public raw!: ReturnType<typeof postgres>;
 
   /**
    * in-memory for local development
@@ -14,7 +15,37 @@ export class Database {
 
   constructor(sql?: ReturnType<typeof postgres>) {
     if (sql) {
-      this.sql = sql;
+      this.raw = sql;
+    }
+  }
+
+  public async sql(strings: TemplateStringsArray | string, ...values: any[]): Promise<any[]> {
+    // Handle both template literals and plain string queries
+    if (typeof strings === 'string') {
+      // For plain string queries, we need to manually substitute values
+      // since unsafe() doesn't support positional parameters
+      let query = strings;
+
+      values.forEach((value, index) => {
+        const placeholder = `$${index + 1}`;
+        let escapedValue: string;
+
+        if (value instanceof Collection) {
+          // For Collection instances, use the table name directly (no quotes)
+          escapedValue = value.name;
+        } else if (typeof value === 'string') {
+          escapedValue = `'${value.replace(/'/g, "''")}'`;
+        } else {
+          escapedValue = String(value);
+        }
+
+        query = query.replace(placeholder, escapedValue);
+      });
+
+      return await this.raw.unsafe(query);
+
+    } else {
+      return await this.raw(strings, ...processSQLValues(this.raw, values));
     }
   }
 
@@ -38,10 +69,10 @@ export class Database {
     //     process.exit(0);
     //   });
 
-      this.sql = postgres('postgres://localhost:5432');
+      this.raw = postgres('postgres://localhost:5432');
 
     } else {
-      this.sql = postgres(uri, options);
+      this.raw = postgres(uri, options);
     }
   }
 
@@ -50,7 +81,7 @@ export class Database {
     shape: T,
     params?: string | zod.core.$ZodObjectParams
   ) {
-    const collection = new Collection<T>(name, zod.object(shape, params).strict(), this.sql);
+    const collection = new Collection<T>(name, zod.object(shape, params).strict(), this.raw);
     await collection.migrate();
     return collection;
   }
@@ -59,6 +90,6 @@ export class Database {
     if (this.pglite) {
       await this.pglite.close();
     }
-    await this.sql.end(options);
+    await this.raw.end(options);
   }
 }
