@@ -1,0 +1,466 @@
+---
+title: Testing
+description: How to test your Zodgres collections and queries effectively
+---
+
+Testing your Zodgres collections and queries is essential for ensuring data integrity and query correctness. This guide covers testing strategies, setup, and best practices.
+
+## Installation for Testing
+
+For testing purposes, you'll need to install the electric-sql modules which provide in-memory database capabilities:
+
+<Tabs items={['npm', 'yarn', 'pnpm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install --save-dev @electric-sql/pglite
+    ```
+  </Tab>
+  <Tab value="yarn">
+    ```bash
+    yarn add --dev @electric-sql/pglite
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add --save-dev @electric-sql/pglite
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add --dev @electric-sql/pglite
+    ```
+  </Tab>
+</Tabs>
+
+The electric-sql modules provide PGlite, a lightweight PostgreSQL implementation that runs entirely in memory, making it perfect for fast unit tests.
+
+## In-Memory Testing
+
+Use in-memory databases for fast testing without external dependencies:
+
+```typescript
+import { describe, it, before, after } from 'mocha';
+import { connect, z } from 'zodgres';
+
+describe('User Queries', () => {
+  let db, users;
+
+  before(async () => {
+    db = await connect(':memory:');
+    users = await db.collection('users', {
+      id: z.number().optional(),
+      name: z.string(),
+      age: z.number().optional(),
+    });
+  });
+
+  after(async () => {
+    await db.close();
+  });
+
+  it('should find adult users', async () => {
+    await users.create([
+      { name: 'Child', age: 12 },
+      { name: 'Adult', age: 25 },
+    ]);
+
+    const adults = await users.select`* WHERE age >= 18`;
+    assert.equal(adults.length, 1);
+    assert.equal(adults[0].name, 'Adult');
+  });
+});
+```
+
+## Test Setup Patterns
+
+### Basic Test Setup
+
+```typescript
+import { connect, z } from 'zodgres';
+import { beforeEach, afterEach } from 'mocha';
+
+describe('Collection Tests', () => {
+  let db;
+  let users;
+
+  beforeEach(async () => {
+    // Create fresh in-memory database for each test
+    db = await connect(':memory:');
+
+    users = await db.collection('users', {
+      id: z.number().optional(),
+      name: z.string(),
+      email: z.string().email(),
+      age: z.number().optional(),
+      created_at: z.date().optional(),
+    });
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  // Your tests here...
+});
+```
+
+### Shared Test Fixtures
+
+Create reusable test data:
+
+```typescript
+const testUsers = [
+  { name: 'Alice Johnson', email: 'alice@example.com', age: 28 },
+  { name: 'Bob Smith', email: 'bob@example.com', age: 35 },
+  { name: 'Carol Davis', email: 'carol@example.com', age: 22 },
+  { name: 'David Wilson', email: 'david@example.com', age: 41 },
+];
+
+beforeEach(async () => {
+  db = await connect(':memory:');
+  users = await db.collection('users', userSchema);
+
+  // Seed test data
+  await users.create(testUsers);
+});
+```
+
+## Testing CRUD Operations
+
+### Testing Creation
+
+```typescript
+it('should create a new user', async () => {
+  const userData = {
+    name: 'John Doe',
+    email: 'john@example.com',
+    age: 30,
+  };
+
+  const user = await users.create(userData);
+
+  assert.ok(user.id);
+  assert.equal(user.name, userData.name);
+  assert.equal(user.email, userData.email);
+  assert.equal(user.age, userData.age);
+  assert.ok(user.created_at instanceof Date);
+});
+
+it('should create multiple users', async () => {
+  const userData = [
+    { name: 'User 1', email: 'user1@example.com' },
+    { name: 'User 2', email: 'user2@example.com' },
+  ];
+
+  const createdUsers = await users.create(userData);
+
+  assert.equal(createdUsers.length, 2);
+  createdUsers.forEach(user => {
+    assert.ok(user.id);
+    assert.ok(user.created_at);
+  });
+});
+```
+
+### Testing Validation
+
+```typescript
+it('should reject invalid email', async () => {
+  try {
+    await users.create({
+      name: 'Invalid User',
+      email: 'not-an-email',
+    });
+    assert.fail('Should have thrown validation error');
+  } catch (error) {
+    assert.ok(error instanceof z.ZodError);
+    assert.ok(error.errors.some(e => e.path.includes('email')));
+  }
+});
+
+it('should reject empty name', async () => {
+  try {
+    await users.create({
+      name: '',
+      email: 'valid@example.com',
+    });
+    assert.fail('Should have thrown validation error');
+  } catch (error) {
+    assert.ok(error instanceof z.ZodError);
+  }
+});
+```
+
+### Testing Queries
+
+```typescript
+it('should find users by age range', async () => {
+  const youngAdults = await users.select`* WHERE age >= 18 AND age < 30`;
+
+  assert.equal(youngAdults.length, 2);
+  youngAdults.forEach(user => {
+    assert.ok(user.age >= 18 && user.age < 30);
+  });
+});
+
+it('should find users by email domain', async () => {
+  const exampleUsers = await users.select`* WHERE email LIKE '%@example.com'`;
+
+  assert.equal(exampleUsers.length, 4);
+  exampleUsers.forEach(user => {
+    assert.ok(user.email.endsWith('@example.com'));
+  });
+});
+
+it('should handle empty results', async () => {
+  const seniors = await users.select`* WHERE age > 65`;
+
+  assert.equal(seniors.length, 0);
+  assert.ok(Array.isArray(seniors));
+});
+```
+
+### Testing Updates
+
+```typescript
+it('should update user age', async () => {
+  const [alice] = await users.select`* WHERE name = 'Alice Johnson'`;
+
+  const updated = await users.update`
+    SET age = 29
+    WHERE id = ${alice.id}
+    RETURNING *
+  `;
+
+  assert.equal(updated.length, 1);
+  assert.equal(updated[0].age, 29);
+  assert.equal(updated[0].name, 'Alice Johnson');
+});
+```
+
+### Testing Deletion
+
+```typescript
+it('should delete user by id', async () => {
+  const [bob] = await users.select`* WHERE name = 'Bob Smith'`;
+
+  const deleted = await users.delete`WHERE id = ${bob.id} RETURNING *`;
+
+  assert.equal(deleted.length, 1);
+  assert.equal(deleted[0].id, bob.id);
+
+  // Verify deletion
+  const remaining = await users.select`* WHERE id = ${bob.id}`;
+  assert.equal(remaining.length, 0);
+});
+```
+
+## Advanced Testing Scenarios
+
+### Testing Transactions
+
+```typescript
+it('should handle transaction rollback', async () => {
+  const initialCount = await users.select`COUNT(*) as count`;
+
+  try {
+    await db.transaction(async (tx) => {
+      const txUsers = tx.collection('users', userSchema);
+
+      await txUsers.create({ name: 'Temp User', email: 'temp@example.com' });
+
+      // Force an error to trigger rollback
+      throw new Error('Intentional error');
+    });
+  } catch (error) {
+    // Expected to fail
+  }
+
+  const finalCount = await users.select`COUNT(*) as count`;
+  assert.equal(finalCount[0].count, initialCount[0].count);
+});
+```
+
+### Testing Complex Queries
+
+```typescript
+it('should perform aggregation queries', async () => {
+  const stats = await users.select`
+    COUNT(*) as total_users,
+    AVG(age) as average_age,
+    MIN(age) as youngest,
+    MAX(age) as oldest
+  `;
+
+  assert.equal(stats.length, 1);
+  assert.equal(stats[0].total_users, 4);
+  assert.ok(stats[0].average_age > 0);
+  assert.equal(stats[0].youngest, 22);
+  assert.equal(stats[0].oldest, 41);
+});
+```
+
+### Testing Error Conditions
+
+```typescript
+it('should handle connection errors gracefully', async () => {
+  await db.close();
+
+  try {
+    await users.select`*`;
+    assert.fail('Should have thrown connection error');
+  } catch (error) {
+    assert.ok(error.message.includes('connection') || error.message.includes('closed'));
+  }
+});
+```
+
+## Performance Testing
+
+### Timing Queries
+
+```typescript
+it('should perform batch insert efficiently', async () => {
+  const largeDataset = Array.from({ length: 1000 }, (_, i) => ({
+    name: `User ${i}`,
+    email: `user${i}@example.com`,
+    age: 20 + (i % 50),
+  }));
+
+  const start = Date.now();
+  const created = await users.create(largeDataset);
+  const duration = Date.now() - start;
+
+  assert.equal(created.length, 1000);
+  assert.ok(duration < 5000, `Batch insert took ${duration}ms, expected < 5000ms`);
+});
+```
+
+### Memory Usage Testing
+
+```typescript
+it('should handle large result sets', async () => {
+  // Create large dataset
+  const largeDataset = Array.from({ length: 10000 }, (_, i) => ({
+    name: `User ${i}`,
+    email: `user${i}@example.com`,
+  }));
+
+  await users.create(largeDataset);
+
+  // Test streaming or chunked retrieval
+  const allUsers = await users.select`*`;
+  assert.equal(allUsers.length, 10000);
+});
+```
+
+## Test Organization
+
+### Test Utilities
+
+Create helper functions for common operations:
+
+```typescript
+// test/helpers.ts
+export async function createTestDB() {
+  const db = await connect(':memory:');
+  return db;
+}
+
+export async function seedUsers(users, count = 10) {
+  const testData = Array.from({ length: count }, (_, i) => ({
+    name: `Test User ${i}`,
+    email: `test${i}@example.com`,
+    age: 20 + (i % 40),
+  }));
+
+  return users.create(testData);
+}
+
+export function assertUser(user, expected) {
+  assert.ok(user.id);
+  assert.equal(user.name, expected.name);
+  assert.equal(user.email, expected.email);
+  if (expected.age !== undefined) {
+    assert.equal(user.age, expected.age);
+  }
+  assert.ok(user.created_at instanceof Date);
+}
+```
+
+### Configuration Files
+
+Set up test configuration:
+
+```typescript
+// test/setup.ts
+import { z } from 'zodgres';
+
+export const userSchema = {
+  id: z.number().optional(),
+  name: z.string().min(1),
+  email: z.string().email(),
+  age: z.number().min(0).max(150).optional(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+};
+
+export const postSchema = {
+  id: z.number().optional(),
+  title: z.string().min(1),
+  content: z.string(),
+  user_id: z.number(),
+  published: z.boolean().default(false),
+  created_at: z.date().optional(),
+};
+```
+
+## Best Practices
+
+### Database Isolation
+
+- Use fresh in-memory databases for each test to ensure isolation
+- Clean up resources with `afterEach()` hooks
+- Avoid shared state between tests
+
+### Meaningful Assertions
+
+```typescript
+// ❌ Weak assertion
+assert.ok(users.length);
+
+// ✅ Strong assertion
+assert.equal(users.length, 3);
+assert.ok(users.every(u => u.age >= 18));
+```
+
+### Test Data Management
+
+```typescript
+// ❌ Hard-coded test data
+const user = await users.create({ name: 'John', email: 'john@test.com' });
+
+// ✅ Meaningful test data
+const userData = {
+  name: 'John Doe',
+  email: 'john.doe@example.com',
+  age: 30,
+};
+const user = await users.create(userData);
+```
+
+### Error Testing
+
+Always test error conditions:
+
+```typescript
+describe('Error Handling', () => {
+  it('should handle invalid data gracefully', async () => {
+    // Test validation errors
+    // Test constraint violations
+    // Test connection errors
+  });
+});
+```
+
+Remember to close database connections in your test cleanup to prevent resource leaks and ensure tests run cleanly.

@@ -219,7 +219,7 @@ await users.drop();
 ```
 
 <Callout type="warning">
-  **Warning:** `drop()` permanently deletes the table and all its data. Use with caution.
+  `drop()` permanently deletes the table and all its data. Use with caution.
 </Callout>
 
 ## Schema Evolution
@@ -298,7 +298,3 @@ export const userSchema = {
 import { userSchema } from './schemas/user';
 const users = await db.collection('users', userSchema);
 ```
-
-## Next Steps
-
-Now that you have collections defined, learn how to [query your data](/querying-collections).

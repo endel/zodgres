@@ -11,19 +11,13 @@ export const baseOptions: BaseLayoutProps = {
   nav: {
     title: (
       <>
-        <svg
+        <img
+          src="/favicon.png"
+          alt="Zodgres Logo"
           width="24"
           height="24"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-label="Zodgres Logo"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <path
-            d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5z"
-            fill="currentColor"
-          />
-        </svg>
+          className="inline-block"
+        />
         Zodgres
       </>
     ),
