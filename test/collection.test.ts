@@ -9,7 +9,7 @@ describe("collection", () => {
   // after(async () => { await db.close(); })
 
   before(async () => {
-    db = await connect("postgres://postgres:postgres@localhost:5432/postgres", { debug: true });
+    db = await connect("postgres://postgres:postgres@localhost:5432/postgres"); // , { debug: true }
     // drop collection tables
     await db.sql`DROP TABLE IF EXISTS users`;
     await db.sql`DROP TABLE IF EXISTS items`;
@@ -22,6 +22,7 @@ describe("collection", () => {
     await db.sql`DROP TABLE IF EXISTS number_to_string`;
     await db.sql`DROP TABLE IF EXISTS create_enum_type`;
     await db.sql`DROP TABLE IF EXISTS update_enum_type`;
+    await db.sql`DROP TABLE IF EXISTS arbitrary_columns`;
   })
 
   after(async () => await db.close());
@@ -301,6 +302,14 @@ describe("collection", () => {
         assert.deepStrictEqual(deleted, 1);
 
         assert.strictEqual(await items.count(), 1);
+      });
+
+      it("should allow delete returning data", async () => {
+        const items = await getItemsCollection();
+        await items.create([{ name: "One" }, { name: "Two" }]);
+
+        const deleted = await items.delete<{ id: number, name: string }>`WHERE name = ${"One"} RETURNING *`;
+        assert.deepStrictEqual(deleted, [{ id: 1, name: "One" }]);
       });
     });
   });
@@ -797,6 +806,43 @@ describe("collection", () => {
       ]);
 
     });
+  });
+
+  describe("querying", () => {
+    it("should allow to select arbitrary columns", async () => {
+      const c = await db.collection("arbitrary_columns", {
+        id: z.number().optional(),
+        name: z.string(),
+        age: z.number(),
+      });
+      await init(c);
+
+      await c.create([
+        { name: "John", age: 25 },
+        { name: "Jane", age: 30 },
+      ]);
+
+      const rows = await c.select`name`;
+      assert.deepStrictEqual(rows, [ { name: "John" }, { name: "Jane" } ]);
+    });
+
+    it("arbitrary count", async () => {
+      const c = await db.collection("arbitrary_columns", {
+        id: z.number().optional(),
+        name: z.string(),
+        age: z.number(),
+      });
+      await init(c);
+
+      await c.create([
+        { name: "John", age: 25 },
+        { name: "Jane", age: 30 },
+      ]);
+
+      const rows = await c.select<{ count: number }>`COUNT(*)`;
+      assert.deepStrictEqual(rows, [ { count: '2' } ]);
+    });
+
   });
 
 });

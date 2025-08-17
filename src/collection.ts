@@ -79,10 +79,10 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     }
   }
 
-  public async select(
+  public async select<R = this['OutputType']>(
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
-  ): Promise<this['OutputType'][]> {
+  ): Promise<R[]> {
     const newStrings = this.buildSqlTemplateStrings(
       strings,
       'SELECT',
@@ -92,16 +92,14 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     const result = await this.sql(newStrings, ...values);
 
-    return result.map((row: any, _: number) => {
-      const cleanedRow = this.convertRowFromDatabase(row);
-      return this.zod.parse(cleanedRow);
-    }) as this['OutputType'][];
+    return result.map((row: any, _: number) =>
+      this.convertRowFromDatabase(row)) as R[];
   }
 
-  public async selectOne(
+  public async selectOne<R = this['OutputType']>(
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
-  ): Promise<this['OutputType'] | undefined> {
+  ): Promise<R | undefined> {
     // Check if LIMIT is already present in the query
     let modifiedStrings = strings;
 
@@ -120,13 +118,13 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     }
 
     const results = await this.select(modifiedStrings, ...values);
-    return results[0];
+    return results[0] as R | undefined;
   }
 
-  public async update(
+  public async update<R = this['OutputType']>(
     strings: TemplateStringsArray,
     ...values: any[]
-  ): Promise<this['OutputType'][]> {
+  ): Promise<R[]> {
     const newStrings = this.buildSqlTemplateStrings(
       strings,
       'UPDATE',
@@ -137,16 +135,17 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     const result = await this.sql(newStrings, ...values);
 
-    return result.map((row: any, _: number) => {
-      const cleanedRow = this.convertRowFromDatabase(row);
-      return this.zod.parse(cleanedRow);
-    }) as this['OutputType'][];
+    return result.map((row: any, _: number) =>
+      this.convertRowFromDatabase(row)) as R[];
   }
 
-  public async delete(
+  public async delete(): Promise<number>;
+  public async delete(strings: TemplateStringsArray, ...values: any[]): Promise<number>;
+  public async delete<R>(strings: TemplateStringsArray, ...values: any[]): Promise<R[]>;
+  public async delete<R = number>(
     strings: TemplateStringsArray = Object.assign([""], { raw: [""] }),
     ...values: any[]
-  ): Promise<number> {
+  ): Promise<R | R[] | number> {
     const newStrings = this.buildSqlTemplateStrings(
       strings,
       'DELETE',
@@ -156,7 +155,9 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     const result = await this.sql(newStrings, ...values);
 
-    return result.count ?? 0;
+    return (result.length > 0)
+      ? [...result] as R[]
+      : result.count as number;
   }
 
   public async count(
@@ -469,7 +470,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
         }
 
         // Get the Zod type for this field to determine if we need type conversion
-        const innerType = this.schema[key]!.zodType;
+        const innerType = this.schema[key]?.zodType;
 
         // Convert string numbers back to actual numbers for numeric fields
         if (innerType instanceof zod.ZodNumber && typeof value === 'string') {
