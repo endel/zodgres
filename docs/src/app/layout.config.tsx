@@ -22,12 +22,5 @@ export const baseOptions: BaseLayoutProps = {
       </>
     ),
   },
-  // see https://fumadocs.dev/docs/ui/navigation/links
-  links: [
-    {
-      text: 'GitHub',
-      url: 'https://github.com/endel/zodgres',
-      external: true,
-    },
-  ],
+  githubUrl: 'https://github.com/endel/zodgres',
 };
