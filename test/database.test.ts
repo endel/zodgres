@@ -24,8 +24,11 @@ describe("database", () => {
       name: z.string()
     });
 
+    await testCollection.create({ name: "test" });
+
     const result1 = await db.sql`SELECT COUNT(*) FROM ${testCollection}`;
     assert.strictEqual(typeof result1[0].count, 'string');
+    assert.strictEqual(result1[0].count, '1');
 
     const result2 = await db.sql("SELECT COUNT(*) FROM $1", testCollection);
     assert.strictEqual(typeof result2[0].count, 'string');
