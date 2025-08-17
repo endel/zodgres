@@ -36,10 +36,23 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return this.zod.parse(input);
   }
 
-  /**
-   * Allow "insert" to call raw INSERT sql instead, just like "update" and "delete".
-   */
-  public insert = this.create;
+  public async insert<R = this['OutputType']>(
+    strings: TemplateStringsArray,
+    ...values: any[]
+  ): Promise<R[]> {
+    const newStrings = this.buildSqlTemplateStrings(
+      strings,
+      'INSERT INTO',
+      /\b(ON\s+CONFLICT|RETURNING)\b/i, // SQL keywords that should come after the VALUES clause
+      '',
+      'RETURNING *'
+    );
+
+    const result = await this.sql(newStrings, ...values);
+
+    return result.map((row: any, _: number) =>
+      this.convertRowFromDatabase(row)) as R[];
+  }
 
   public async create(input: zod.input<typeof this.zod>): Promise<this['OutputType']>;
   public async create(inputs: zod.input<typeof this.zod>[]): Promise<this['OutputType'][]>;

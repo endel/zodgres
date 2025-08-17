@@ -75,6 +75,42 @@ describe("collection", () => {
       });
     });
 
+    describe("raw insert", () => {
+      it("should insert with raw SQL and return results", async () => {
+        const items = await getItemsCollection();
+
+        const inserted = await items.insert`(name) VALUES (${"Raw Insert Test"})`;
+        assert.deepStrictEqual(inserted, [{ id: 1, name: "Raw Insert Test" }]);
+
+        const all = await items.select`* ORDER BY id`;
+        assert.deepStrictEqual(all, [
+          { id: 1, name: "Raw Insert Test" },
+        ]);
+      });
+
+      it("should insert multiple records with raw SQL", async () => {
+        const users = await getUsersCollection();
+
+        const inserted = await users.insert`(name, age) VALUES (${"Alice"}, ${25}), (${"Bob"}, ${30})`;
+        inserted.sort((a, b) => (a.id as number) - (b.id as number));
+
+        assert.deepStrictEqual(inserted, [
+          { id: 1, name: "Alice", age: 25 },
+          { id: 2, name: "Bob", age: 30 }
+        ]);
+      });
+
+      it("should work with conditional inserts", async () => {
+        const users = await getUsersCollection();
+
+        const name = "Dynamic User";
+        const age = 25;
+        const inserted = await users.insert`(name, age) VALUES (${name}, ${age > 18 ? age : 18})`;
+
+        assert.deepStrictEqual(inserted, [{ id: 1, name: "Dynamic User", age: 25 }]);
+      });
+    });
+
     describe("select", async () => {
       it("should select all", async () => {
         const items = await getItemsCollection();

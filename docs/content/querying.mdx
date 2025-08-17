@@ -6,34 +6,34 @@ icon: Search
 
 Zodgres provides a simple and intuitive API for querying collections using Postgres.js ES6 Tagged Template Strings.
 
-## Creating records
+## create()
 
-Create a single record with the `create()` method.
+Create single or multiple records in a collection.
+
+### Creating a Single Record
 
 ```typescript
 const users = await db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
-  email: z.string().email(),
   age: z.number().optional(),
 });
 
 const user = await users.create({
   name: 'John Doe',
-  email: 'john@example.com',
   age: 30,
 });
 
-// Result: { id: 1, name: 'John Doe', email: 'john@example.com', age: 30 }
+// Result: { id: 1, name: 'John Doe', age: 30 }
 ```
 
-Create multiple records at once:
+### Creating Multiple Records
 
 ```typescript
 const newUsers = await users.create([
-  { name: 'Alice', email: 'alice@example.com' },
-  { name: 'Bob', email: 'bob@example.com', age: 25 },
-  { name: 'Carol', email: 'carol@example.com', age: 35 },
+  { name: 'Alice' },
+  { name: 'Bob', age: 25 },
+  { name: 'Carol', age: 35 },
 ]);
 
 // Result: Array of created user objects with generated IDs
@@ -46,165 +46,197 @@ All data is validated against your Zod schema:
 ```typescript
 // ❌ This will throw a validation error
 await users.create({
-  name: '', // Empty string not allowed
-  email: 'invalid-email', // Invalid email format
+  name: '', // Empty string validation may fail depending on schema
   age: -5, // Negative age if min(0) constraint exists
 });
 ```
 
-## Selecting Records
+## select()
 
-### Select All
+Retrieve records from a collection using SQL template literals.
 
-Retrieve all records from a collection:
+### Select All Records
 
 ```typescript
-// Select all users
+// Select all users (both forms work)
 const allUsers = await users.select();
-// or
 const allUsers = await users.select`*`;
 ```
 
-### Conditional Selection
-
-Use SQL template literals for conditional queries:
+### Select with Conditions
 
 ```typescript
-// Select users by age
-const adults = await users.select`* WHERE age >= ${18}`;
-
-// Select by name
-const john = await users.select`* WHERE name = ${'John Doe'}`;
+// Select with WHERE clause
+const specificUser = await users.select`* WHERE name = ${'John Doe'}`;
 
 // Select with multiple conditions
-const activeAdults = await users.select`
-  * WHERE age >= ${18}
-  AND status = ${'active'}
-`;
+const adults = await users.select`* WHERE age >= ${18}`;
 ```
 
-### Specific Columns
-
-Select only specific columns:
+### Select Specific Columns
 
 ```typescript
-// Select only names and emails
-const contacts = await users.select`name, email`;
+// Select only specific columns
+const names = await users.select`name`;
+const nameAndAge = await users.select`name, age`;
 
-// Select with conditions
-const names = await users.select`name WHERE age > ${25}`;
+// Select columns with conditions
+const adultNames = await users.select`name WHERE age > ${25}`;
 ```
 
 ### Ordering and Limiting
 
-Use SQL clauses for ordering and pagination:
-
 ```typescript
-// Order by age descending
-const oldestUsers = await users.select`
-  * WHERE age IS NOT NULL
-  ORDER BY age DESC
-`;
+// Order results
+const orderedUsers = await users.select`* ORDER BY age DESC`;
 
 // Limit results
-const recentUsers = await users.select`
-  * ORDER BY created_at DESC
-  LIMIT ${10}
-`;
+const limitedUsers = await users.select`* LIMIT ${10}`;
 
-// Pagination
-const page = 2;
-const pageSize = 10;
-const offset = (page - 1) * pageSize;
-
-const paginatedUsers = await users.select`
-  * ORDER BY id
-  LIMIT ${pageSize}
-  OFFSET ${offset}
-`;
+// Combined ordering and limiting
+const topUsers = await users.select`* ORDER BY id LIMIT ${5}`;
 ```
-
-## Advanced Queries
 
 ### Aggregations
 
-Perform aggregations using SQL functions:
+```typescript
+// Count records - note: returns string, not number
+const countResult = await users.select<{ count: string }>`COUNT(*)`;
+
+// Other aggregations work similarly
+const stats = await users.select`AVG(age) as average_age WHERE age IS NOT NULL`;
+```
+
+## selectOne()
+
+Select a single record. Automatically adds `LIMIT 1` and returns the first result or `undefined`.
 
 ```typescript
-// Count users
-const userCount = await users.select`COUNT(*) as count`;
+// Get first user
+const firstUser = await users.selectOne`*`;
 
-// Average age
-const avgAge = await users.select`AVG(age) as average_age WHERE age IS NOT NULL`;
+// Get specific user
+const specificUser = await users.selectOne`* WHERE name = ${'John'}`;
 
-// Group by status
-const statusCounts = await users.select`
-  status, COUNT(*) as count
-  GROUP BY status
+// ❌ This will throw an error - LIMIT not allowed
+// await users.selectOne`* LIMIT 1`;
+```
+
+## update()
+
+Update records and return the updated data.
+
+### Basic Updates
+
+```typescript
+// Update specific record
+const updated = await users.update`name = ${'Updated Name'} WHERE id = ${1}`;
+// Returns: [{ id: 1, name: 'Updated Name', age: 30 }]
+
+// Update multiple records
+const multiUpdated = await users.update`age = ${25} WHERE name = ${'Bob'}`;
+```
+
+### Update Multiple Fields
+
+```typescript
+// Update multiple fields at once
+const updated = await users.update`
+  name = ${'New Name'}, age = ${31}
+  WHERE id = ${2}
 `;
 ```
 
-### Joins (Raw SQL)
-
-For complex queries involving multiple tables, use raw SQL:
+### Update All Records
 
 ```typescript
-const orders = await db.collection('orders', {
-  id: z.number().optional(),
-  user_id: z.number(),
-  total: z.number(),
-  created_at: z.date().optional(),
-});
+// Update all records (no WHERE clause)
+const allUpdated = await users.update`status = ${'active'}`;
+```
 
-// Join users and orders
-const userOrders = await users.select`
-  u.name, u.email, o.total, o.created_at
-  JOIN orders o ON users.id = users.user_id
-  WHERE o.total > ${100}
-  ORDER BY o.created_at DESC
+### Update with Complex Conditions
+
+```typescript
+// Update with IN clause
+const updated = await users.update`
+  status = ${'inactive'}
+  WHERE id IN (${1}, ${3}, ${5})
 `;
 ```
 
-### Pattern Matching
+## delete()
 
-Use SQL pattern matching:
+Delete records from a collection.
 
-```typescript
-// LIKE operator
-const emailUsers = await users.select`* WHERE email LIKE ${'%@gmail.com'}`;
-
-// ILIKE for case-insensitive
-const nameSearch = await users.select`* WHERE name ILIKE ${'%john%'}`;
-
-// Regular expressions (PostgreSQL)
-const phonePattern = await users.select`* WHERE phone ~ ${'^\\+1'}`;
-```
-
-### Array and JSON Queries
-
-Query JSON and array fields:
+### Delete All Records
 
 ```typescript
-const profiles = await db.collection('profiles', {
-  id: z.number().optional(),
-  user_id: z.number(),
-  preferences: z.object({
-    theme: z.string(),
-    notifications: z.boolean(),
-  }),
-  tags: z.array(z.string()),
-});
+// Delete all records, returns count
+const deletedCount = await users.delete();
+// Returns: number (e.g., 5)
+```
 
-// Query JSON fields
-const darkThemeUsers = await profiles.select`
-  * WHERE preferences->>'theme' = ${'dark'}
+### Delete with Conditions
+
+```typescript
+// Delete specific records, returns count
+const deletedCount = await users.delete`WHERE age < ${18}`;
+// Returns: number of deleted records
+```
+
+### Delete with RETURNING
+
+```typescript
+// Delete and return the deleted records
+const deletedUsers = await users.delete<{ id: number, name: string }>`
+  WHERE name = ${'John'} RETURNING *
 `;
+// Returns: Array of deleted user objects
+```
 
-// Query array fields
-const taggedProfiles = await profiles.select`
-  * WHERE tags @> ${JSON.stringify(['developer'])}
+## count()
+
+Count records in a collection.
+
+```typescript
+// Count all records
+const totalUsers = await users.count();
+
+// Count with conditions
+const adultCount = await users.count`WHERE age >= ${18}`;
+
+// Count with complex conditions
+const activeAdultCount = await users.count`
+  WHERE age >= ${18} AND status = ${'active'}
 `;
 ```
+
+## insert()
+
+Insert records using raw SQL and return the inserted data.
+
+```typescript
+// Insert single record
+const inserted = await users.insert`(name, age) VALUES (${'John'}, ${30})`;
+// Returns: [{ id: 1, name: 'John', age: 30 }]
+
+// Insert with only some fields
+const inserted = await users.insert`(name) VALUES (${'Jane'})`;
+// Returns: [{ id: 2, name: 'Jane', age: null }]
+
+// Insert multiple records in one query
+const inserted = await users.insert`
+  (name, age) VALUES
+  (${'Alice'}, ${25}),
+  (${'Bob'}, ${30}),
+  (${'Charlie'}, ${35})
+`;
+// Returns: Array of inserted user objects
+```
+
+<Callout type="info">
+The `insert()` method uses raw SQL, unlike `create()` which accepts objects. For simple object-based inserts, use `create()`. For complex SQL operations, use `insert()`.
+</Callout>
 
 ## Parameter Safety
 
@@ -228,12 +260,12 @@ Handle query errors gracefully:
 try {
   const user = await users.create({
     name: 'John',
-    email: 'john@example.com',
+    age: 30,
   });
 } catch (error) {
   if (error.code === '23505') {
     // Unique constraint violation
-    console.error('Email already exists');
+    console.error('Duplicate key violation');
   } else if (error instanceof z.ZodError) {
     // Validation error
     console.error('Invalid data:', error.errors);
@@ -245,7 +277,7 @@ try {
 
 ## Type Safety
 
-All query results are properly typed:
+All query results are properly typed based on your schema:
 
 ```typescript
 const users = await db.collection('users', {
@@ -255,26 +287,16 @@ const users = await db.collection('users', {
 });
 
 const allUsers = await users.select();
-// Type: Array<{ id: number, name: string, age: number | null }>
+// Type: Array<{ id: number, name: string, age: number | undefined }>
 
 allUsers.forEach(user => {
   console.log(user.name); // ✅ TypeScript knows this is a string
-  console.log(user.age);  // ✅ TypeScript knows this can be null
+  console.log(user.age);  // ✅ TypeScript knows this can be undefined
   // console.log(user.email); // ❌ TypeScript error - not in schema
 });
 ```
 
 ## Performance Tips
-
-### Use Indexes
-
-For frequently queried fields, consider adding database indexes:
-
-```typescript
-// After creating your collection, add indexes manually
-await db.sql`CREATE INDEX idx_users_email ON users(email)`;
-await db.sql`CREATE INDEX idx_users_age ON users(age)`;
-```
 
 ### Batch Operations
 
@@ -282,10 +304,10 @@ Use batch operations for better performance:
 
 ```typescript
 // ✅ Better - single query for multiple records
-const users = await users.create([
-  { name: 'User 1', email: 'user1@example.com' },
-  { name: 'User 2', email: 'user2@example.com' },
-  { name: 'User 3', email: 'user3@example.com' },
+const newUsers = await users.create([
+  { name: 'User 1' },
+  { name: 'User 2' },
+  { name: 'User 3' },
 ]);
 
 // ❌ Slower - multiple queries
@@ -300,83 +322,9 @@ Reduce data transfer by selecting only required columns:
 
 ```typescript
 // ✅ Better - only select needed columns
-const userNames = await users.select`name, id WHERE active = true`;
+const userNames = await users.select`name WHERE age > ${18}`;
 
 // ❌ Slower - transfers unnecessary data
-const activeUsers = await users.select`* WHERE active = true`;
+const activeUsers = await users.select`* WHERE age > ${18}`;
 const names = activeUsers.map(u => u.name);
-```
-
-## Raw SQL Access
-
-For complex queries beyond collection methods, access the underlying SQL client:
-
-```typescript
-// Direct SQL access
-const result = await db.sql`
-  SELECT u.name, COUNT(o.id) as order_count
-  FROM users u
-  LEFT JOIN orders o ON u.id = o.user_id
-  GROUP BY u.id, u.name
-  HAVING COUNT(o.id) > ${5}
-  ORDER BY order_count DESC
-`;
-```
-
-
-## Best Practices
-
-### Query Organization
-
-Keep complex queries organized:
-
-```typescript
-// queries/users.ts
-export class UserQueries {
-  constructor(private users: Collection) {}
-
-  async findAdultsByStatus(status: string) {
-    return this.users.select`
-      * WHERE age >= 18
-      AND status = ${status}
-      ORDER BY created_at DESC
-    `;
-  }
-
-  async findByEmailDomain(domain: string) {
-    return this.users.select`
-      * WHERE email LIKE ${`%@${domain}`}
-    `;
-  }
-}
-```
-
-### Parameter Validation
-
-Validate parameters before querying:
-
-```typescript
-async function getUsersByAge(minAge: number) {
-  if (minAge < 0 || minAge > 150) {
-    throw new Error('Invalid age range');
-  }
-
-  return users.select`* WHERE age >= ${minAge}`;
-}
-```
-
-### Connection Management
-
-Remember to close connections:
-
-```typescript
-const db = await connect('postgres://localhost:5432/mydb');
-
-try {
-  const users = await db.collection('users', schema);
-  const results = await users.select();
-  // Process results...
-} finally {
-  await db.close();
-}
 ```
