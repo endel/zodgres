@@ -1,10 +1,8 @@
 ---
 title: Schema Definition
-description: Create type-safe collections with Zod schemas and automatic migrations
+description: Create type-safe Collections using Zod schemas with automatic migrations
 icon: Database
 ---
-
-Collections in `zodgres` are type-safe database tables defined using Zod schemas. They automatically handle table creation, migrations, and provide full TypeScript support.
 
 ## Example
 
@@ -142,20 +140,6 @@ const events = await db.collection('events', {
   end_time: z.date(),
   created_at: z.date().optional(),       // Auto-managed timestamps
   updated_at: z.date().optional(),
-});
-```
-
-## Collection Parameters
-
-Pass additional parameters to customize collection behavior:
-
-```typescript
-const users = await db.collection('users', {
-  id: z.number().optional(),
-  name: z.string(),
-}, {
-  strict: true,    // Reject unknown properties
-  strip: false,    // Don't strip unknown properties
 });
 ```
 

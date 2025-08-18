@@ -1,17 +1,15 @@
 ---
 title: Collections
-description: How to create, read, update, and delete records using SQL template literals
+description: Zodgres provides a simple and intuitive API for querying collections using Postgres.js ES6 Tagged Template Strings.
 icon: Search
 ---
-
-Zodgres provides a simple and intuitive API for querying collections using Postgres.js ES6 Tagged Template Strings.
 
 ## Creating Records
 
 Create single or multiple records in a collection.
 
 <Callout type="info">
-For simple object-based inserts, use `create()`. For complex SQL operations, use `insert()`.
+For complex SQL operations, use [`insert()`](#raw-sql-insert) with raw SQL.
 </Callout>
 
 ### Single Record
@@ -174,7 +172,7 @@ const activeAdults = await users.count`
 Insert records using raw SQL and return the inserted data.
 
 <Callout type="info">
-The `insert()` method uses raw SQL, unlike `create()` which accepts objects. For complex SQL operations, use `insert()`.
+The `insert()` method uses raw SQL, unlike [`create()`](#creating-records) which accepts structured objects.
 </Callout>
 
 ```typescript
