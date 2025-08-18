@@ -2,8 +2,7 @@ import postgres from 'postgres';
 import * as zod from 'zod';
 
 import { usePglite } from './pglite.js';
-import { Collection } from './collection.js';
-import { processSQLValues } from './typemap.js';
+import { Collection, processSQLValues } from './collection.js';
 
 export class Database {
   public raw!: ReturnType<typeof postgres>;

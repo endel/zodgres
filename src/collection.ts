@@ -1,8 +1,7 @@
 import postgres from 'postgres';
 import * as zod from 'zod';
 import { zodToMappedType, zodUnwrapType } from './typemap.js';
-import { type ColumnDefinition, createEnumType } from './utils.js';
-import { processSQLValues } from './typemap.js';
+import { createEnumType, type ColumnDefinition } from './utils.js';
 
 const DEFAULT_METHODS = ['now()', 'gen_random_uuid()',];
 
@@ -580,4 +579,14 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return withDefaults as this['Type'];
   }
 
+}
+
+export function processSQLValues(sql: ReturnType<typeof postgres>, values: any[]): any[] {
+    return values.map(value => {
+        if (value instanceof Collection) {
+            // Return the table name directly (no quotes)
+            return sql.unsafe(value.name);
+        }
+        return value;
+    });
 }
