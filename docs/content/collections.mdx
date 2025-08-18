@@ -1,167 +1,20 @@
 ---
 title: Collections
-description: Create type-safe collections with Zod schemas and automatic migrations
-icon: Database
+description: How to create, read, update, and delete records using SQL template literals
+icon: Search
 ---
 
-Collections in `zodgres` are type-safe database tables defined using Zod schemas. They automatically handle table creation, migrations, and provide full TypeScript support.
+Zodgres provides a simple and intuitive API for querying collections using Postgres.js ES6 Tagged Template Strings.
 
-## Example
+## Creating Records
 
-Create a collection by defining a Zod schema:
-
-```typescript
-import { connect, z } from 'zodgres';
-
-const db = await connect('postgres://localhost:5432/mydb');
-
-const users = await db.collection('users', {
-  id: z.number().optional(),        // Auto-incrementing primary key
-  name: z.string().max(100),        // Required string with max length
-  email: z.string().email(),        // Required email validation
-  age: z.number().min(0).optional(), // Optional positive number
-});
-```
-
-## Schema Definition
-
-### Data Types
-
-Zodgres maps Zod types to PostgreSQL column types:
-
-| Zod Type | PostgreSQL Type | Example |
-|----------|----------------|---------|
-| `z.string()` | `TEXT` | `z.string()` |
-| `z.string().max()` | `CHARACTER VARYING` | `z.string().max(255)` |
-| `z.number()` | `NUMERIC` | `z.number().int()` |
-| `z.boolean()` | `BOOLEAN` | `z.boolean()` |
-| `z.date()` | `TIMESTAMP` | `z.date()` |
-| `z.enum()` | `ENUM` | `z.enum(['active', 'inactive'])` |
-| `z.array()` | `JSONB` | `z.array(z.string())` |
-| `z.object()` | `JSONB` | `z.object({ key: z.string() })` |
-
-### Primary Keys
-
-Define auto-incrementing primary keys with optional numbers:
-
-```typescript
-const products = await db.collection('products', {
-  id: z.number().optional(), // Auto-incrementing primary key
-  name: z.string(),
-  price: z.number().positive(),
-});
-```
+Create single or multiple records in a collection.
 
 <Callout type="info">
-  **Convention:** Use `id: z.number().optional()` for auto-incrementing primary keys.
+For simple object-based inserts, use `create()`. For complex SQL operations, use `insert()`.
 </Callout>
 
-### String Constraints
-
-Apply various string constraints:
-
-```typescript
-const articles = await db.collection('articles', {
-  id: z.number().optional(),
-  title: z.string().max(200),           // Max length
-  slug: z.string().min(3).max(50),      // Min and max length
-  content: z.string(),                   // Unlimited text
-  status: z.enum(['draft', 'published']), // Enum values
-});
-```
-
-### Number Constraints
-
-Define numeric constraints and types:
-
-```typescript
-const orders = await db.collection('orders', {
-  id: z.number().optional(),
-  total: z.number().positive(),          // Must be positive
-  quantity: z.number().int().min(1),     // Integer >= 1
-  discount: z.number().min(0).max(1),    // Between 0 and 1
-  rating: z.number().min(1).max(5).optional(), // Optional rating
-});
-```
-
-### Optional Fields
-
-Make fields optional with `.optional()`:
-
-```typescript
-const profiles = await db.collection('profiles', {
-  id: z.number().optional(),
-  user_id: z.number(),                   // Required
-  bio: z.string().optional(),            // Optional
-  avatar_url: z.string().url().optional(), // Optional URL
-  birth_date: z.date().optional(),       // Optional date
-});
-```
-
-## Advanced Schema Features
-
-### Unique Constraints
-
-Create unique constraints using the custom `.unique()` method:
-
-```typescript
-const users = await db.collection('users', {
-  id: z.number().optional(),
-  email: z.string().email().unique(),    // Unique email
-  username: z.string().min(3).unique(),  // Unique username
-  name: z.string(),
-});
-```
-
-### JSON Fields
-
-Store complex data as JSON:
-
-```typescript
-const settings = await db.collection('user_settings', {
-  id: z.number().optional(),
-  user_id: z.number(),
-  preferences: z.object({
-    theme: z.enum(['light', 'dark']),
-    notifications: z.boolean(),
-    language: z.string(),
-  }),
-  tags: z.array(z.string()),             // Array of strings
-});
-```
-
-### Date and Time
-
-Handle timestamps and dates:
-
-```typescript
-const events = await db.collection('events', {
-  id: z.number().optional(),
-  name: z.string(),
-  start_time: z.date(),                  // Timestamp
-  end_time: z.date(),
-  created_at: z.date().optional(),       // Auto-managed timestamps
-  updated_at: z.date().optional(),
-});
-```
-
-## Collection Parameters
-
-Pass additional parameters to customize collection behavior:
-
-```typescript
-const users = await db.collection('users', {
-  id: z.number().optional(),
-  name: z.string(),
-}, {
-  strict: true,    // Reject unknown properties
-  strip: false,    // Don't strip unknown properties
-});
-```
-
-## Type Inference
-
-Zodgres provides full TypeScript type inference:
+### Single Record
 
 ```typescript
 const users = await db.collection('users', {
@@ -170,132 +23,251 @@ const users = await db.collection('users', {
   age: z.number().optional(),
 });
 
-// TypeScript infers the correct types
 const user = await users.create({
-  name: 'John',  // ✅ Required
-  age: 30,       // ✅ Optional
-  // email: 'test' // ❌ TypeScript error - not in schema
-});
-
-// Return type is inferred as:
-// { id: number, name: string, age: number | null }
-```
-
-## Table Management
-
-### Automatic Migration
-
-Collections automatically create tables when first accessed:
-
-```typescript
-// Table is created automatically on first collection access
-const users = await db.collection('users', {
-  id: z.number().optional(),
-  name: z.string(),
+  name: 'John',
+  age: 30,
 });
 ```
 
-### Manual Migration
-
-Force table creation or updates:
+### Multiple Records
 
 ```typescript
-const users = await db.collection('users', {
-  id: z.number().optional(),
-  name: z.string(),
-  email: z.string().email(),
+const newUsers = await users.create([
+  { name: 'Alice' },
+  { name: 'Bob', age: 25 },
+]);
+```
+
+### Validation
+
+Data is validated against your Zod schema:
+
+```typescript
+// ❌ Validation error
+await users.create({
+  name: '',
+  age: -5,
 });
-
-// Manually trigger migration
-await users.migrate();
 ```
 
-### Drop Tables
+## Retrieving Records
 
-Remove tables when needed:
+Retrieve records from a collection using SQL template literals.
+
+### All Records
 
 ```typescript
-// Drop the entire table
-await users.drop();
+const allUsers = await users.select();
+const allUsers = await users.select`*`;
 ```
 
-<Callout type="warning">
-  `drop()` permanently deletes the table and all its data. Use with caution.
+### With Conditions
+
+```typescript
+const user = await users.select`* WHERE name = ${'John'}`;
+const adults = await users.select`* WHERE age >= ${18}`;
+```
+
+### Specific Columns
+
+```typescript
+const names = await users.select`name`;
+const adultNames = await users.select`name WHERE age > ${25}`;
+```
+
+### Ordering and Limiting
+
+```typescript
+const orderedUsers = await users.select`* ORDER BY age DESC`;
+const topUsers = await users.select`* ORDER BY id LIMIT ${5}`;
+```
+
+### Aggregations
+
+```typescript
+const countResult = await users.select<{ count: string }>`COUNT(*)`;
+const avgAge = await users.select`AVG(age) WHERE age IS NOT NULL`;
+```
+
+## Single Record
+
+Select a single record. Automatically adds `LIMIT 1` and returns the first result or `undefined`.
+
+```typescript
+const firstUser = await users.selectOne`*`;
+const user = await users.selectOne`* WHERE name = ${'John'}`;
+```
+
+## Updating Records
+
+Update records and return the updated data.
+
+### Basic Updates
+
+```typescript
+const updated = await users.update`name = ${'John'} WHERE id = ${1}`;
+const multi = await users.update`age = ${25} WHERE name = ${'Bob'}`;
+```
+
+### Multiple Fields
+
+```typescript
+const updated = await users.update`
+  name = ${'Jane'}, age = ${31}
+  WHERE id = ${2}
+`;
+```
+
+### All Records
+
+```typescript
+const allUpdated = await users.update`status = ${'active'}`;
+```
+
+### Complex Conditions
+
+```typescript
+const updated = await users.update`
+  status = ${'inactive'}
+  WHERE id IN (${1}, ${3}, ${5})
+`;
+```
+
+## Deleting Records
+
+Delete records from a collection.
+
+### All Records
+
+```typescript
+const deletedCount = await users.delete();
+```
+
+### With Conditions
+
+```typescript
+const deletedCount = await users.delete`WHERE age < ${18}`;
+```
+
+### With RETURNING
+
+```typescript
+const deletedUsers = await users.delete<{ id: number, name: string }>`
+  WHERE name = ${'John'} RETURNING *
+`;
+```
+
+## Counting Records
+
+Count records in a collection.
+
+```typescript
+const totalUsers = await users.count();
+const adultCount = await users.count`WHERE age >= ${18}`;
+const activeAdults = await users.count`
+  WHERE age >= ${18} AND status = ${'active'}
+`;
+```
+
+## Raw SQL Insert
+
+Insert records using raw SQL and return the inserted data.
+
+<Callout type="info">
+The `insert()` method uses raw SQL, unlike `create()` which accepts objects. For complex SQL operations, use `insert()`.
 </Callout>
 
-## Schema Evolution
+```typescript
+const inserted = await users.insert`(name, age) VALUES (${'John'}, ${30})`;
 
-### Adding Fields
+const inserted = await users.insert`(name) VALUES (${'Jane'})`;
 
-Add new optional fields to existing schemas:
+const multiple = await users.insert`
+  (name, age) VALUES
+  (${'Alice'}, ${25}),
+  (${'Bob'}, ${30})
+`;
+```
+
+## Parameter Safety
+
+Template literals automatically handle parameter escaping - thanks to [Postgres.js](https://github.com/porsager/postgres).
 
 ```typescript
-// Original schema
+const searchTerm = "'; DROP TABLE users; --";
+
+// ✅ Safe - parameters are properly escaped
+const results = await users.select`* WHERE name = ${searchTerm}`;
+```
+
+## Error Handling
+
+Handle query errors gracefully:
+
+```typescript
+try {
+  const user = await users.create({
+    name: 'John',
+    age: 30,
+  });
+} catch (error) {
+  if (error.code === '23505') {
+    // Unique constraint violation
+    console.error('Duplicate key violation');
+  } else if (error instanceof z.ZodError) {
+    // Validation error
+    console.error('Invalid data:', error.errors);
+  } else {
+    console.error('Database error:', error.message);
+  }
+}
+```
+
+## Type Safety
+
+All query results are properly typed based on your schema:
+
+```typescript
 const users = await db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
+  age: z.number().optional(),
 });
 
-// Later, add optional fields
-const usersV2 = await db.collection('users', {
-  id: z.number().optional(),
-  name: z.string(),
-  email: z.string().email().optional(), // New optional field
-  created_at: z.date().optional(),       // New optional field
-});
-```
+const allUsers = await users.select();
+// Type: Array<{ id: number, name: string, age: number | undefined }>
 
-### Schema Validation
-
-Zodgres validates data against your schema on every operation:
-
-```typescript
-const users = await db.collection('users', {
-  id: z.number().optional(),
-  name: z.string().max(50),
-  age: z.number().min(0).max(120),
-});
-
-// ❌ This will throw a validation error
-await users.create({
-  name: 'A'.repeat(100), // Too long
-  age: -5,               // Negative age
+allUsers.forEach(user => {
+  console.log(user.name); // ✅ TypeScript knows this is a string
+  console.log(user.age);  // ✅ TypeScript knows this can be undefined
+  // console.log(user.email); // ❌ TypeScript error - not in schema
 });
 ```
 
-## Best Practices
+## Performance Tips
 
-### Naming Conventions
-
-- Use snake_case for field names to match PostgreSQL conventions
-- Use plural names for collection/table names
-- Be explicit with constraints
+### Batch Operations
 
 ```typescript
-const user_profiles = await db.collection('user_profiles', {
-  id: z.number().optional(),
-  user_id: z.number(),
-  first_name: z.string().max(50),
-  last_name: z.string().max(50),
-  created_at: z.date().optional(),
-  updated_at: z.date().optional(),
-});
+// ✅ Better - single query
+const newUsers = await users.create([
+  { name: 'User 1' },
+  { name: 'User 2' },
+]);
+
+// ❌ Slower - multiple queries
+for (const userData of userDataArray) {
+  await users.create(userData);
+}
 ```
 
-### Schema Organization
-
-Organize schemas in separate files for maintainability:
+### Select Only Needed Columns
 
 ```typescript
-// schemas/user.ts
-export const userSchema = {
-  id: z.number().optional(),
-  name: z.string().max(100),
-  email: z.string().email().unique(),
-  created_at: z.date().optional(),
-};
+// ✅ Better - only needed columns
+const userNames = await users.select`name WHERE age > ${18}`;
 
-// main.ts
-import { userSchema } from './schemas/user';
-const users = await db.collection('users', userSchema);
+// ❌ Slower - unnecessary data
+const activeUsers = await users.select`* WHERE age > ${18}`;
+const names = activeUsers.map(u => u.name);
 ```

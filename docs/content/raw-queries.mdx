@@ -1,0 +1,139 @@
+---
+title: Raw Queries
+description: Execute raw SQL queries using db.sql and db.raw methods
+icon: Code
+---
+
+When you need to execute complex SQL queries that go beyond the collection methods, Zodgres provides two ways to run raw SQL: `db.sql()` and `db.raw()`.
+
+## db.sql() - SQL with Collection Support
+
+The `db.sql()` method allows you to execute raw SQL queries while leveraging Zodgres collections as table references.
+
+### Using Collections as Table Names
+
+One of the key features of `db.sql()` is that it accepts collection instances directly as table names:
+
+```typescript
+const users = await db.collection('users', {
+  id: z.number().optional(),
+  name: z.string(),
+  age: z.number().optional(),
+});
+
+const posts = await db.collection('posts', {
+  id: z.number().optional(),
+  title: z.string(),
+  userId: z.number(),
+});
+
+// Using collections in template literals
+const result = await db.sql`SELECT COUNT(*) FROM ${users}`;
+```
+
+### Template Literal Queries
+
+Use template literals for complex queries with parameter interpolation:
+
+```typescript
+// Basic query with parameters
+const adults = await db.sql`
+  SELECT name, age
+  FROM ${users}
+  WHERE age >= ${18}
+`;
+
+// Join queries between collections
+const userPosts = await db.sql`
+  SELECT u.name, p.title
+  FROM ${users} u
+  JOIN ${posts} p ON u.id = p.userId
+  WHERE u.age > ${25}
+`;
+
+// Aggregation queries
+const stats = await db.sql`
+  SELECT
+    COUNT(*) as total_users,
+    AVG(age) as average_age,
+    MAX(age) as max_age
+  FROM ${users}
+  WHERE age IS NOT NULL
+`;
+```
+
+## db.raw() - Direct SQL Execution
+
+The `db.raw()` method provides direct access to the underlying Postgres.js connection for executing raw SQL queries without any Zodgres-specific processing.
+
+### Basic Raw Queries
+
+```typescript
+// Simple queries
+const result = await db.raw`SELECT 1 as test`;
+const currentTime = await db.raw`SELECT NOW()`;
+
+// Database administration
+const tables = await db.raw`
+  SELECT table_name
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+`;
+```
+
+### Creating Custom Tables
+
+```typescript
+// Create a custom table not managed by Zodgres
+await db.raw`
+  CREATE TABLE IF NOT EXISTS analytics_log (
+    id SERIAL PRIMARY KEY,
+    event_type VARCHAR(50),
+    user_id INTEGER,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`;
+
+// Insert data into custom table
+await db.raw`
+  INSERT INTO analytics_log (event_type, user_id, metadata)
+  VALUES (${'login'}, ${123}, ${'{"ip": "192.168.1.1"}'})
+`;
+```
+
+### Advanced Database Operations
+
+```typescript
+// Create indexes
+await db.raw`CREATE INDEX IF NOT EXISTS idx_users_age ON users(age)`;
+
+// Create views
+await db.raw`
+  CREATE OR REPLACE VIEW active_users AS
+  SELECT * FROM users
+  WHERE last_login > NOW() - INTERVAL '30 days'
+`;
+
+// Analyze query performance
+const queryPlan = await db.raw`
+  EXPLAIN ANALYZE
+  SELECT * FROM users u
+  JOIN posts p ON u.id = p.userId
+  WHERE u.age > 25
+`;
+```
+
+## When to Use Each Method
+
+### Use `db.sql()` when:
+- You need to reference Zodgres collections in your queries
+- You want parameter safety with automatic escaping
+- You're performing complex queries involving your defined collections
+- You need joins between collections
+
+### Use `db.raw()` when:
+- You need direct database access
+- You're performing database administration tasks
+- You're working with tables not managed by Zodgres
+- You need maximum control over the SQL execution

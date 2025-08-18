@@ -1,0 +1,108 @@
+---
+title: In-memory Database
+description: Using PGlite for in-memory PostgreSQL database operations
+icon: Database
+---
+
+Zodgres supports using PGlite, a lightweight PostgreSQL implementation that runs entirely in memory. This is particularly useful for testing, prototyping, and scenarios where you need a temporary database without external dependencies.
+
+## Installation
+
+To use the in-memory database capabilities, install the electric-sql modules:
+
+<Tabs items={['npm', 'yarn', 'pnpm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install @electric-sql/pglite @electric-sql/pglite-socket
+    ```
+  </Tab>
+  <Tab value="yarn">
+    ```bash
+    yarn add @electric-sql/pglite @electric-sql/pglite-socket
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add @electric-sql/pglite @electric-sql/pglite-socket
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add @electric-sql/pglite @electric-sql/pglite-socket
+    ```
+  </Tab>
+</Tabs>
+
+## Basic Usage
+
+Connect to an in-memory database using the `:memory:` connection string:
+
+```typescript
+import { connect, z } from 'zodgres';
+
+// Create in-memory database
+const db = await connect(':memory:');
+
+// Define a collection
+const users = await db.collection('users', {
+  id: z.number().optional(),
+  name: z.string(),
+  email: z.string().email(),
+  age: z.number().optional(),
+});
+
+// Use normally
+await users.create({ name: 'Alice', email: 'alice@example.com', age: 28 });
+const allUsers = await users.select`*`;
+
+// Clean up when done
+await db.close();
+```
+
+## Testing Applications
+
+The in-memory database is particularly useful for testing since it provides fast, isolated database instances:
+
+```typescript
+import { describe, it, beforeEach, afterEach } from 'mocha';
+import { connect, z } from 'zodgres';
+
+describe('User Operations', () => {
+  let db, users;
+
+  beforeEach(async () => {
+    db = await connect(':memory:');
+    users = await db.collection('users', {
+      id: z.number().optional(),
+      name: z.string(),
+      age: z.number().optional(),
+    });
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  it('should create and find users', async () => {
+    await users.create({ name: 'Alice', age: 25 });
+    const found = await users.select`* WHERE name = 'Alice'`;
+    assert.equal(found.length, 1);
+  });
+});
+```
+
+## Benefits
+
+- **No external dependencies**: Runs entirely in memory without requiring a PostgreSQL server
+- **Fast**: Ideal for unit tests and rapid prototyping
+- **Isolated**: Each connection creates a separate database instance
+- **Full PostgreSQL compatibility**: Supports all PostgreSQL features and SQL syntax
+- **Easy cleanup**: Database is automatically cleaned up when the connection closes
+
+## Limitations
+
+- **Memory only**: Data is lost when the connection closes
+- **Single process**: Cannot be shared between different processes
+- **Performance**: While fast for small datasets, may not match dedicated PostgreSQL for large operations
+
+The in-memory database provides an excellent foundation for testing your Zodgres applications and for scenarios where you need a temporary, lightweight database solution.

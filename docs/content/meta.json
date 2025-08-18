@@ -2,8 +2,11 @@
   "title": "Zodgres Documentation",
   "pages": [
     "index",
+    "--- Collections ---",
+    "schema-definition",
     "collections",
-    "querying",
-    "testing"
+    "raw-queries",
+    "--- Extra ---",
+    "in-memory-database"
   ]
 }
