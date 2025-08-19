@@ -8,6 +8,7 @@
     "raw-queries",
     "migrations",
     "--- Extra ---",
-    "in-memory-database"
+    "in-memory-database",
+    "cloud-postgresql-providers"
   ]
 }

@@ -1,0 +1,340 @@
+---
+title: Cloud PostgreSQL Providers
+description: Guide to using Zodgres with popular cloud PostgreSQL providers
+icon: Cloud
+---
+
+Zodgres works seamlessly with any PostgreSQL-compatible database, including all major cloud providers. This guide covers how to connect to and configure various cloud PostgreSQL services.
+
+## Popular Cloud Providers
+
+<Tabs items={['Digital Ocean', 'Vultr', 'Neon', 'Supabase', 'AWS RDS', 'Google Cloud SQL', 'Azure Database', 'Railway']}>
+  <Tab value="Digital Ocean">
+    Digital Ocean provides managed PostgreSQL databases with predictable pricing and simple scaling.
+
+    [Visit website →](https://www.digitalocean.com/products/managed-databases-postgresql?refcode=6833100c4766&utm_campaign=Referral_Invite&utm_medium=Referral_Program) <small>**(New signups get $200, 60-day account credit)**</small>
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://username:password@db-postgresql-nyc1-12345-do-user-123456-0.b.db.ondigitalocean.com:25060/defaultdb',
+      {
+        ssl: 'require',
+        max: 15,
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Predictable monthly pricing
+    - Automated backups with point-in-time recovery
+    - High availability with standby nodes
+    - Built-in connection pooling
+    - Metrics and alerting
+
+    **Connection Notes:**
+    - SSL is required for all connections
+    - Default database name is usually `defaultdb`
+    - Connection pooling is available at the database level
+    - Supports read-only replicas
+  </Tab>
+
+  <Tab value="Vultr">
+    Vultr offers managed PostgreSQL with global deployment options and competitive pricing.
+
+    [Visit website →](https://www.vultr.com/products/managed-databases/?ref=9632185-9J) <small>**(New signups get $100, 30-day account credit)**</small>
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://username:password@vultr-prod-12345.vultrdb.com:5432/defaultdb',
+      {
+        ssl: 'require',
+        max: 20,
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Multiple global locations
+    - Automated daily backups
+    - High performance SSD storage
+    - Database clustering support
+    - 24/7 support
+
+    **Connection Notes:**
+    - SSL connections are enforced
+    - Multiple user management options
+    - Supports connection from trusted sources
+    - Easy scaling of compute and storage
+  </Tab>
+
+  <Tab value="Neon">
+    Neon offers serverless PostgreSQL with branching and automatic scaling.
+
+    [Visit website →](https://neon.tech)
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://username:password@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname',
+      {
+        ssl: 'require',
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Serverless with automatic scaling to zero
+    - Database branching for development workflows
+    - Time travel queries
+    - Generous free tier
+
+    **Connection Notes:**
+    - Always use SSL connections
+    - Supports connection pooling out of the box
+    - Consider using different branches for different environments
+  </Tab>
+
+  <Tab value="Supabase">
+    Supabase provides PostgreSQL with real-time capabilities and built-in authentication.
+
+    [Visit website →](https://supabase.com)
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:5432/postgres',
+      {
+        ssl: 'require',
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Real-time subscriptions
+    - Built-in authentication and authorization
+    - Auto-generated APIs
+    - Dashboard for database management
+
+    **Connection Notes:**
+    - Use the direct database URL for Zodgres
+    - Consider using connection pooling for production
+    - Supabase provides both direct and pooled connections
+  </Tab>
+
+  <Tab value="AWS RDS">
+    Amazon RDS provides managed PostgreSQL instances with automatic backups, scaling, and maintenance.
+
+    [Visit website →](https://aws.amazon.com/rds/postgresql/)
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://username:password@your-rds-endpoint.region.rds.amazonaws.com:5432/dbname',
+      {
+        ssl: 'require',
+        max: 20,
+        idle_timeout: 30,
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Automated backups and point-in-time recovery
+    - Multi-AZ deployments for high availability
+    - Read replicas for scaling read operations
+    - Performance insights and monitoring
+
+    **Connection Notes:**
+    - Always use SSL in production (`ssl: 'require'`)
+    - Consider connection pooling for high-traffic applications
+    - Use IAM authentication when possible
+  </Tab>
+
+  <Tab value="Google Cloud SQL">
+    Google Cloud SQL offers fully managed PostgreSQL with automatic scaling and high availability.
+
+    [Visit website →](https://cloud.google.com/sql/postgresql)
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://username:password@your-instance-ip:5432/dbname',
+      {
+        ssl: {
+          rejectUnauthorized: false, // For self-signed certificates
+        },
+        max: 15,
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Automatic storage increase
+    - High availability with regional persistent disks
+    - Automated and on-demand backups
+    - Integration with Google Cloud IAM
+
+    **Connection Notes:**
+    - Use private IP when connecting from Google Cloud services
+    - Enable Cloud SQL Proxy for secure connections
+    - Configure authorized networks for public IP access
+  </Tab>
+
+  <Tab value="Azure Database">
+    Microsoft Azure provides managed PostgreSQL with built-in security and compliance.
+
+    [Visit website →](https://azure.microsoft.com/en-us/products/postgresql)
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(
+      'postgres://username@servername:password@servername.postgres.database.azure.com:5432/dbname',
+      {
+        ssl: 'require',
+        max: 10,
+      }
+    );
+    ```
+
+    **Key Features:**
+    - Built-in high availability
+    - Automatic backups with point-in-time restore
+    - Advanced threat protection
+    - VNet integration
+
+    **Connection Notes:**
+    - Username format includes server name: `username@servername`
+    - SSL is required by default
+    - Configure firewall rules for access
+  </Tab>
+
+  <Tab value="Railway">
+    Railway provides simple PostgreSQL deployment with automatic scaling.
+
+    [Visit website →](https://railway.app)
+
+    ```typescript
+    import { connect } from 'zodgres';
+
+    const db = await connect(process.env.DATABASE_URL, {
+      ssl: 'require',
+    });
+    ```
+
+    **Key Features:**
+    - Simple deployment and management
+    - Automatic backups
+    - Built-in metrics and logging
+    - Git-based deployments
+  </Tab>
+</Tabs>
+
+## Connection Best Practices
+
+### Environment Variables
+
+Store connection strings securely using environment variables:
+
+```typescript
+import { connect } from 'zodgres';
+
+const db = await connect(process.env.DATABASE_URL, {
+  ssl: process.env.NODE_ENV === 'production' ? 'require' : false,
+  max: parseInt(process.env.DB_POOL_SIZE || '10'),
+});
+```
+
+### Connection Pooling
+
+Configure appropriate connection pooling for your application:
+
+```typescript
+const db = await connect(connectionString, {
+  max: 20,                    // Maximum connections
+  idle_timeout: 30,           // Close idle connections after 30s
+  max_lifetime: 60 * 30,      // Close connections after 30 minutes
+});
+```
+
+### SSL Configuration
+
+Most cloud providers require SSL. Configure it appropriately:
+
+```typescript
+// Basic SSL requirement
+const db = await connect(connectionString, {
+  ssl: 'require',
+});
+
+// Custom SSL configuration
+const db = await connect(connectionString, {
+  ssl: {
+    rejectUnauthorized: false,  // For self-signed certificates
+    ca: fs.readFileSync('ca-certificate.crt').toString(),
+  },
+});
+```
+
+### Error Handling
+
+Implement proper error handling for cloud connections:
+
+```typescript
+import { connect } from 'zodgres';
+
+async function connectToDatabase() {
+  try {
+    const db = await connect(process.env.DATABASE_URL, {
+      ssl: 'require',
+      connect_timeout: 10,  // 10 second timeout
+    });
+
+    // Test the connection
+    await db.query`SELECT 1`;
+    return db;
+  } catch (error) {
+    console.error('Failed to connect to database:', error.message);
+    throw error;
+  }
+}
+```
+
+## Monitoring and Performance
+
+### Connection Monitoring
+
+Monitor your database connections:
+
+```typescript
+const db = await connect(connectionString, {
+  onnotice: (notice) => console.log('DB Notice:', notice),
+  onparameter: (key, value) => console.log(`DB Param ${key}:`, value),
+});
+```
+
+### Performance Optimization
+
+- Use connection pooling appropriately
+- Monitor slow queries
+- Implement proper indexing
+- Consider read replicas for read-heavy workloads
+
+## Security Considerations
+
+- Always use SSL in production
+- Store credentials securely (environment variables, secret managers)
+- Use IAM authentication when available
+- Implement proper network security (VPCs, firewalls)
+- Regularly rotate credentials
+- Monitor for suspicious activity
+
+Choose the cloud provider that best fits your needs in terms of features, pricing, geographic location, and integration with your existing infrastructure.
