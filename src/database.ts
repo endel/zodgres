@@ -75,7 +75,7 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
       // Use pglite-socket on development
       // https://github.com/electric-sql/pglite/blob/main/packages/pglite-socket/examples/basic-server.ts
       //
-      this.pglite = usePglite(uri);
+      this.pglite = usePglite();
 
       // start pglite socket socket server
       await this.pglite.start();
@@ -89,7 +89,7 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
     //     process.exit(0);
     //   });
 
-      this.raw = postgres('postgres://localhost:5431');
+      this.raw = postgres('postgres://localhost:5431', { max: 1 });
 
     } else {
       this.raw = postgres(uri, options);

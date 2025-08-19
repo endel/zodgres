@@ -1,7 +1,7 @@
 import { connect, z } from "../src";
 import assert from "assert";
 
-xdescribe("PGLite", () => {
+describe("PGLite", () => {
 
     it("should connect", async () => {
         const db = await connect(":memory:", { onnotice: () => { } });
