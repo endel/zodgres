@@ -10,22 +10,17 @@ export function usePglite() {
     .then((v) => console.log('PGLite version:', v?.rows?.[0]?.version))
     .catch((err) => console.error('Database error:', err));
 
-//   db.query(`SELECT *
-// FROM pg_catalog.pg_tables
-// WHERE schemaname != 'pg_catalog' AND
-//     schemaname != 'information_schema';
-// `).then(console.log);
-
   const server = new PGLiteSocketServer({
     db,
     port: 5431,
     host: '127.0.0.1',
     // path: UNIX,
     inspect: false, // Print the incoming and outgoing data to the console
-  })
+    debug: false,
+  });
 
   return {
-    server,
+    start: () => server.start(),
     db,
     close: async () => {
       try {

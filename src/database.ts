@@ -75,10 +75,10 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
       // Use pglite-socket on development
       // https://github.com/electric-sql/pglite/blob/main/packages/pglite-socket/examples/basic-server.ts
       //
-      this.pglite = usePglite();
+      this.pglite = usePglite(uri);
 
       // start pglite socket socket server
-      await this.pglite.server.start();
+      await this.pglite.start();
 
     //   // Handle SIGINT to stop the server and close the database
     //   process.on('SIGINT', async () => {

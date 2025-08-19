@@ -26,6 +26,9 @@ describe("database", () => {
     });
     await db.open();
 
+    await db.sql`DROP TABLE IF EXISTS ${coll}`;
+    await coll.migrate();
+
     await coll.create({ name: "test" });
 
     const result1 = await db.sql`SELECT COUNT(*) FROM ${coll}`;
