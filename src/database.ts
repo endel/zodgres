@@ -7,8 +7,9 @@ import { Migrator } from './migrator.js';
 
 import type { SQL } from './utils.js';
 
-export class Database {
+export class Database<T extends Record<string, postgres.PostgresType> = {}> {
   public raw!: SQL;
+  public isOpen = false;
 
   /**
    * Migrator instance
@@ -20,10 +21,19 @@ export class Database {
    */
   protected pglite?: ReturnType<typeof usePglite>;
 
-  constructor(sql?: SQL) {
-    if (sql) {
-      this.raw = sql;
-    }
+  /**
+   * Collections
+   */
+  protected collections: Record<string, Collection> = {};
+
+  protected uri!: string;
+  protected options!: (postgres.Options<T> & { migrations?: string }) | undefined;
+
+  constructor(uri: string, options?: (postgres.Options<T> & { migrations?: string }) | undefined) {
+    this.uri = uri;
+    this.options = options;
+    // @ts-ignore
+    this.raw = (...args: any[]) => Promise.reject('Database not connected');
   }
 
   public async sql(strings: TemplateStringsArray | string, ...values: any[]): Promise<any[]> {
@@ -92,34 +102,33 @@ export class Database {
     }
   }
 
-  public async collection<T extends zod.core.$ZodLooseShape>(
+  public collection<T extends zod.core.$ZodLooseShape>(
     name: string,
     shape: T,
     params?: string | zod.core.$ZodObjectParams
   ) {
-    const collection = new Collection<T>(name, zod.object(shape, params).strict(), this.raw);
+    const collection = new Collection<T>(name, zod.object(shape, params).strict(), this);
 
-    await this.migrator.migrateCollection(name, collection, this);
+    this.collections[name] = collection;
+
+    // If defining a collection after the database is open, migrate it immediately
+    if (this.isOpen) {
+      this.migrator.migrateCollection(name, collection, this);
+    }
 
     return collection;
   }
 
-  public getMigrator(): Migrator | undefined {
-    return this.migrator;
-  }
+  public async open() {
+    await this.connect(this.uri, this.options);
 
-  public async getAppliedMigrations(): Promise<Array<{ migration: string; collection: string | null; applied_at: Date }>> {
-    if (!this.migrator) {
-      return [];
-    }
-    return this.migrator.getAppliedMigrations();
-  }
+    this.isOpen = true;
 
-  public async getPendingMigrations(): Promise<string[]> {
-    if (!this.migrator) {
-      return [];
+    for (const name in this.collections) {
+      await this.migrator.migrateCollection(name, this.collections[name]!, this);
     }
-    return this.migrator.getPendingMigrations();
+
+    return this;
   }
 
   public async close(options?: { timeout?: number | undefined } | undefined) {

@@ -1,6 +1,7 @@
 import assert from "assert";
 import { connect, Database, typemap, z, type Row } from "../src/index.js";
 import { init } from "./utils.js";
+import postgres from "postgres";
 
 describe("collection", () => {
   let db: Database;
@@ -8,41 +9,48 @@ describe("collection", () => {
   // before(async () => { db = await connect(":memory:"); })
   // after(async () => { await db.close(); })
 
-  before(async () => {
-    db = await connect("postgres://postgres:postgres@localhost:5432/postgres"); // , { debug: true }
-    // drop collection tables
-    await db.raw`DROP TABLE IF EXISTS users`;
-    await db.raw`DROP TABLE IF EXISTS items`;
-    await db.raw`DROP TABLE IF EXISTS uuid_auto_increment`;
-    await db.raw`DROP TABLE IF EXISTS uuid_types`;
-    await db.raw`DROP TABLE IF EXISTS auto_incrementing_test`;
-    await db.raw`DROP TABLE IF EXISTS mixed_objects_test`;
-    await db.raw`DROP TABLE IF EXISTS unique_test`;
-    await db.raw`DROP TABLE IF EXISTS unique_optional_test`;
-    await db.raw`DROP TABLE IF EXISTS number_to_string`;
-    await db.raw`DROP TABLE IF EXISTS create_enum_type`;
-    await db.raw`DROP TABLE IF EXISTS update_enum_type`;
-    await db.raw`DROP TABLE IF EXISTS arbitrary_columns`;
-  })
+  let openDb = async (db: Database) => {
+    // drop all collections before connecting with Database
+    const sql = postgres(db['uri'], { debug: false, onnotice: () => {} });
+    await sql.begin(async (sql) => {
+      await sql`DROP TABLE IF EXISTS users`;
+      await sql`DROP TABLE IF EXISTS items`;
+      await sql`DROP TABLE IF EXISTS uuid_auto_increment`;
+      await sql`DROP TABLE IF EXISTS uuid_types`;
+      await sql`DROP TABLE IF EXISTS auto_increment_id`;
+      await sql`DROP TABLE IF EXISTS auto_incrementing_test`;
+      await sql`DROP TABLE IF EXISTS mixed_objects_test`;
+      await sql`DROP TABLE IF EXISTS unique_test`;
+      await sql`DROP TABLE IF EXISTS unique_optional_test`;
+      await sql`DROP TABLE IF EXISTS number_to_string`;
+      await sql`DROP TABLE IF EXISTS create_enum_type`;
+      await sql`DROP TABLE IF EXISTS update_enum_type`;
+      await sql`DROP TABLE IF EXISTS arbitrary_columns`;
+    });
+    await sql.end();
 
-  after(async () => await db.close());
+    await db.open();
+  }
+
+  beforeEach(() => db = connect("postgres://postgres:postgres@localhost:5432/postgres"));
+  afterEach(async () => await db.close());
 
   const getItemsCollection = async () => {
-    const items = await db.collection("items", {
+    const items = db.collection("items", {
       id: z.number().optional(),
       name: z.string().max(100),
     });
-    await init(items);
+    await openDb(db);
     return items;
   };
 
   const getUsersCollection = async () => {
-    const users = await db.collection("users", {
+    const users = db.collection("users", {
       id: z.number().optional(),
       name: z.string().max(100),
       age: z.number().min(0).max(100).optional(),
     });
-    await init(users);
+    await openDb(db);
     return users;
   };
 
@@ -268,14 +276,13 @@ describe("collection", () => {
       });
 
       it("should work with complex collections", async () => {
-        const users = await db.collection("update_users", {
+        const users = db.collection("update_users", {
           id: z.number().optional(),
           name: z.string().max(100),
           age: z.number().min(0).max(100).optional(),
           active: z.boolean().optional(),
         });
-
-        await init(users);
+        await openDb(db);
 
         await users.create([
           { name: "Alice", age: 25, active: true },
@@ -354,12 +361,11 @@ describe("collection", () => {
 
     describe("auto-incrementing id", () => {
       it("should create a table with an auto-incrementing id", async () => {
-        const c = await db.collection("auto_increment_id", {
+        const c = db.collection("auto_increment_id", {
           id: z.number().optional(),
           name: z.string().optional(),
         });
-        z.string({})
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'id', data_type: typemap.id, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
           { column_name: "name", data_type: typemap.string, character_maximum_length: null, column_default: null, is_nullable: "YES" },
@@ -374,10 +380,10 @@ describe("collection", () => {
 
       xit("should create a table with an auto-incrementing id", async () => {
         // this test fails: batch inserting empty objects with table having only an auto-incrementing id
-        const c = await db.collection("auto_increment_id", {
+        const c = db.collection("auto_increment_id", {
           id: z.number().optional(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'id', data_type: typemap.id, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -390,12 +396,12 @@ describe("collection", () => {
       });
 
       it("should handle mixed arrays with empty and populated objects", async () => {
-        const c = await db.collection("mixed_defaults", {
+        const c = db.collection("mixed_defaults", {
           id: z.number().optional(),
           name: z.string().optional(),
           age: z.number().optional(),
         });
-        await init(c);
+        await openDb(db);
 
         // Test mixed array: empty object, object with data, empty object, object with data
         await c.create([{}, { name: "Alice" }, { age: 25 }, { name: "Bob" }]);
@@ -412,10 +418,10 @@ describe("collection", () => {
 
     describe("numeric types", () => {
       it("number = numeric", async () => {
-        const c = await db.collection("numeric_types", {
+        const c = db.collection("numeric_types", {
           value: z.number(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.number, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -426,20 +432,20 @@ describe("collection", () => {
       });
 
       it("float32 = real", async () => {
-        const c = await db.collection("numeric_types", {
+        const c = db.collection("numeric_types", {
           value: z.float32(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.float32, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
       });
 
       it("float64 = double precision", async () => {
-        const c = await db.collection("numeric_types", {
+        const c = db.collection("numeric_types", {
           value: z.float64(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.float64, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -448,30 +454,30 @@ describe("collection", () => {
 
     describe("string types", () => {
       it("string = text", async () => {
-        const c = await db.collection("string_types", {
+        const c = db.collection("string_types", {
           value: z.string(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.string, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
       });
 
       it("string = varchar(100) with default", async () => {
-        const c = await db.collection("string_types", {
+        const c = db.collection("string_types", {
           value: z.string().max(100).default("default"),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.string_max, character_maximum_length: 100, column_default: "'default'::character varying", is_nullable: 'NO' },
         ]);
       });
 
       it("string = varchar(100) with default and optional", async () => {
-        const c = await db.collection("string_types", {
+        const c = db.collection("string_types", {
           value: z.string().max(100).default("default").optional(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.string_max, character_maximum_length: 100, column_default: "'default'::character varying", is_nullable: 'YES' },
         ]);
@@ -481,20 +487,20 @@ describe("collection", () => {
 
     describe("date types", () => {
       it("date = timestamp without time zone", async () => {
-        const c = await db.collection("date_types", {
+        const c = db.collection("date_types", {
           value: z.date(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.date, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
       });
 
       it("date = timestamp without time zone with default", async () => {
-        const c = await db.collection("date_types", {
+        const c = db.collection("date_types", {
           value: z.date().default(new Date()),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.date, character_maximum_length: null, column_default: "now()", is_nullable: 'NO' },
         ]);
@@ -504,11 +510,11 @@ describe("collection", () => {
 
     describe("uuid types", () => {
       it("primary key as uuid (auto-incrementing)", async () => {
-        const c = await db.collection("uuid_auto_increment", {
+        const c = db.collection("uuid_auto_increment", {
           id: z.uuid().optional(),
           name: z.string(),
         });
-        await init(c);
+        await openDb(db);
 
         await c.create([{ name: "John" }]);
 
@@ -518,10 +524,10 @@ describe("collection", () => {
       });
 
       it("guid = uuid", async () => {
-        const c = await db.collection("uuid_types", {
+        const c = db.collection("uuid_types", {
           value: z.guid().optional(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.uuid, character_maximum_length: null, column_default: "gen_random_uuid()", is_nullable: 'YES' },
         ]);
@@ -535,10 +541,10 @@ describe("collection", () => {
       });
 
       it("uuid = uuid", async () => {
-        const c = await db.collection("uuid_types", {
+        const c = db.collection("uuid_types", {
           value: z.uuid(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.uuid, character_maximum_length: null, column_default: "gen_random_uuid()", is_nullable: 'NO' },
         ]);
@@ -552,10 +558,10 @@ describe("collection", () => {
 
     describe("boolean types", () => {
       it("boolean = boolean", async () => {
-        const c = await db.collection("boolean_types", {
+        const c = db.collection("boolean_types", {
           value: z.boolean(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -566,10 +572,10 @@ describe("collection", () => {
       });
 
       it("boolean with default", async () => {
-        const c = await db.collection("boolean_default_types", {
+        const c = db.collection("boolean_default_types", {
           value: z.boolean().default(true),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: 'true', is_nullable: 'NO' },
         ]);
@@ -579,10 +585,10 @@ describe("collection", () => {
       });
 
       it("boolean optional", async () => {
-        const c = await db.collection("boolean_optional_types", {
+        const c = db.collection("boolean_optional_types", {
           value: z.boolean().optional(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: null, is_nullable: 'YES' },
         ]);
@@ -597,10 +603,10 @@ describe("collection", () => {
       });
 
       it("boolean with default and optional", async () => {
-        const c = await db.collection("boolean_default_optional_types", {
+        const c = db.collection("boolean_default_optional_types", {
           value: z.boolean().default(false).optional(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.boolean, character_maximum_length: null, column_default: 'false', is_nullable: 'YES' },
         ]);
@@ -615,12 +621,12 @@ describe("collection", () => {
 
     describe("enum types", () => {
       it("create enum type", async () => {
-        const c = await db.collection("create_enum_type", {
+        const c = db.collection("create_enum_type", {
           value: z.enum(['electronics', 'books', 'clothing']),
         });
         type EnumCollection = Row<typeof c>;
 
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.enum, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -631,10 +637,10 @@ describe("collection", () => {
       });
 
       it("update enum type", async () => {
-        const c = await db.collection("update_enum_type", {
+        const c = db.collection("update_enum_type", {
           value: z.enum(['electronics', 'books', 'clothing']),
         });
-        await init(c);
+        await openDb(db);
 
         // should reject invalid option
         assert.rejects(async () => {
@@ -642,7 +648,7 @@ describe("collection", () => {
           await c.create({ value: "furniture" });
         }, /Invalid option/);
 
-        const c2 = await db.collection("update_enum_type", {
+        const c2 = db.collection("update_enum_type", {
           value: z.enum(['electronics', 'books', 'clothing', 'furniture']),
         });
         type EnumCollection = Row<typeof c2>;
@@ -657,10 +663,10 @@ describe("collection", () => {
 
     describe("JSONB types", () => {
       it("z.array()", async () => {
-        const c = await db.collection("jsonb_types", {
+        const c = db.collection("jsonb_types", {
           value: z.array(z.string()),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.array, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -671,13 +677,13 @@ describe("collection", () => {
       });
 
       it("z.object()", async () => {
-        const c = await db.collection("jsonb_types", {
+        const c = db.collection("jsonb_types", {
           value: z.object({
             name: z.string(),
             age: z.number(),
           }),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.object, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -688,10 +694,10 @@ describe("collection", () => {
       });
 
       it("z.record()", async () => {
-        const c = await db.collection("jsonb_types", {
+        const c = db.collection("jsonb_types", {
           value: z.record(z.string(), z.number()),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.record, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -702,10 +708,10 @@ describe("collection", () => {
       });
 
       it("z.any()", async () => {
-        const c = await db.collection("jsonb_types", {
+        const c = db.collection("jsonb_types", {
           value: z.any(),
         });
-        await init(c);
+        await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
           { column_name: 'value', data_type: typemap.any, character_maximum_length: null, column_default: null, is_nullable: 'NO' },
         ]);
@@ -720,13 +726,13 @@ describe("collection", () => {
 
   describe("unique constraints", () => {
     it("should create column with unique constraint", async () => {
-      const c = await db.collection("unique_test", {
+      const c = db.collection("unique_test", {
         id: z.number().optional(),
         email: z.string().unique(),
         username: z.string().max(50).unique(),
       });
 
-      await init(c);
+      await openDb(db);
 
       // Insert first record - should succeed
       await c.create({ email: "test@example.com", username: "testuser" });
@@ -749,12 +755,12 @@ describe("collection", () => {
     });
 
     it("should work with optional unique fields", async () => {
-      const c = await db.collection("unique_optional_test", {
+      const c = db.collection("unique_optional_test", {
         id: z.number().optional(),
         code: z.string().optional().unique(),
       });
 
-      await init(c);
+      await openDb(db);
 
       // Insert record with code - should succeed
       await c.create({ code: "ABC123" });
@@ -771,7 +777,7 @@ describe("collection", () => {
 
   describe("alter table", () => {
     it("should convert integer fields to varchar", async () => {
-      const users1 = await db.collection("number_to_string", {
+      const users1 = db.collection("number_to_string", {
         id: z.number().optional(),
         age: z.number().min(0).max(100),
       });
@@ -785,7 +791,7 @@ describe("collection", () => {
         { id: 2, age: 30 },
       ]);
 
-      const users2 = await db.collection("number_to_string", {
+      const users2 = db.collection("number_to_string", {
         id: z.number().optional(),
         age: z.string(),
       });
@@ -799,14 +805,14 @@ describe("collection", () => {
     });
 
     it("should convert string field to enum", async () => {
-      const c = await db.collection("text_to_enum", {
+      const c = db.collection("text_to_enum", {
         value: z.string().max(100)
       });
-      await init(c);
+      await openDb(db);
 
       await c.create([{ value: "one" }, { value: "two" }, { value: "three" }]);
 
-      const c2 = await db.collection("text_to_enum", {
+      const c2 = db.collection("text_to_enum", {
         value: z.enum(['one', 'two', 'three']),
       });
 
@@ -819,10 +825,10 @@ describe("collection", () => {
     });
 
     it("nullable to not null", async () => {
-      const c = await db.collection("nullable_to_not_null", {
+      const c = db.collection("nullable_to_not_null", {
         value: z.number().optional(),
       });
-      await init(c);
+      await openDb(db);
 
       await c.create([{}, {}, { value: 3 }]);
       assert.deepStrictEqual(await c.select(), [
@@ -831,7 +837,7 @@ describe("collection", () => {
         { value: 3 },
       ]);
 
-      const c2 = await db.collection("nullable_to_not_null", {
+      const c2 = db.collection("nullable_to_not_null", {
         value: z.number().default(0),
       });
 
@@ -846,12 +852,12 @@ describe("collection", () => {
 
   describe("querying", () => {
     it("should allow to select arbitrary columns", async () => {
-      const c = await db.collection("arbitrary_columns", {
+      const c = db.collection("arbitrary_columns", {
         id: z.number().optional(),
         name: z.string(),
         age: z.number(),
       });
-      await init(c);
+      await openDb(db);
 
       await c.create([
         { name: "John", age: 25 },
@@ -863,12 +869,12 @@ describe("collection", () => {
     });
 
     it("arbitrary count", async () => {
-      const c = await db.collection("arbitrary_columns", {
+      const c = db.collection("arbitrary_columns", {
         id: z.number().optional(),
         name: z.string(),
         age: z.number(),
       });
-      await init(c);
+      await openDb(db);
 
       await c.create([
         { name: "John", age: 25 },

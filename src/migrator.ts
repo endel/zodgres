@@ -121,10 +121,6 @@ export class Migrator {
     const hasMigrationFiles = this.hasMigrationFiles();
 
     return await this.sql.begin(async (sql) => {
-      // Create a temporary collection instance that uses the transaction sql
-      const transactionCollection = Object.create(collection);
-      transactionCollection.sql = sql;
-
       let pendingMigrations: string[] = [];
       if (hasMigrationFiles) {
         // Get list of applied collection migrations

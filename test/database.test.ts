@@ -4,7 +4,7 @@ import { connect, Database, z } from "../src/index.js";
 describe("database", () => {
   let db: Database;
 
-  before(async () => { db = await connect(":memory:"); })
+  before(async () => { db = await connect(":memory:").open(); })
   after(async () => { await db.close(); })
 
   it("should allow to connect to 'pglite'", async () => {

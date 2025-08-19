@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import * as zod from 'zod';
+import type { Database } from './database.js';
 import { zodToMappedType, zodUnwrapType } from './typemap.js';
 import { createEnumType, type ColumnDefinition, type SQL } from './utils.js';
 
@@ -24,12 +25,16 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }} = {};
 
   protected zod: zod.ZodObject<T>;
-  protected sql!: SQL;
+  protected db!: Database;
 
-  constructor(name: string, zodObject: zod.ZodObject<T>, sql: SQL) {
+  constructor(name: string, zodObject: zod.ZodObject<T>, db: Database) {
     this.name = name;
     this.zod = zodObject;
-    this.sql = sql;
+    this.db = db;
+  }
+
+  get sql(): SQL {
+    return this.db.raw;
   }
 
   public parse(input: zod.input<typeof this.zod>): this['Type'] {

@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('migration scripts', () => {
     before(async() => {
-        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres");
+        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres").open();
         await db.raw`DROP TABLE IF EXISTS products`;
         await db.raw`DROP TABLE IF EXISTS migrations`;
         await db.raw`DROP TYPE IF EXISTS products_category_enum`;
@@ -16,17 +16,20 @@ describe('migration scripts', () => {
 
     it('should run a migration script before migrating a collection', async () => {
         // Step 1: Create initial data with string category field
-        const db1 = await connect("postgres://postgres:postgres@localhost:5432/postgres");
-        const products1 = await db1.collection('products', {
+        const db1 = connect("postgres://postgres:postgres@localhost:5432/postgres")
+        const products1 = db1.collection('products', {
             id: z.number().optional(),
             category: z.string().max(100),
         });
+        await db1.open();
+
         await products1.create([
             { category: 'electronics' },
             { category: 'clothing' },
             { category: 'books' },
             { category: 'other' },
         ]);
+
 
         // Verify initial data
         const initialData = await db1.raw`SELECT * FROM products ORDER BY id`;
@@ -39,15 +42,17 @@ describe('migration scripts', () => {
         await db1.close();
 
         // Step 2: Connect with migrations path - this should run the migration
-        const db2 = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
+        const db2 = connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations')
         });
 
         // Step 3: Create collection with enum constraint - this should work after migration
-        const products2 = await db2.collection('products', {
+        const products2 = db2.collection('products', {
             id: z.number().optional(),
             category: z.enum(['electronics', 'other']),
         });
+
+        await db2.open();
 
         // Step 4: Verify migration worked correctly
         const migratedData = await db2.sql`SELECT * FROM ${products2} ORDER BY id`;
@@ -81,11 +86,11 @@ describe('migration scripts', () => {
         // Connect again with migrations - should not re-run migrations
         const db = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations')
-        });
+        }).open();
 
         const db2 = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations')
-        });
+        }).open();
 
         // Verify migration count hasn't changed
         const migrations = await db.raw`SELECT * FROM migrations`;

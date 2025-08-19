@@ -16,13 +16,11 @@ export type { SQL };
 // import { Migrator } from './migrator.js';
 // export { Migrator };
 
-export async function connect<T extends Record<string, postgres.PostgresType> = {}>(
+export function connect<T extends Record<string, postgres.PostgresType> = {}>(
   uri: string,
   options?: (postgres.Options<T> & { migrations?: string }) | undefined
 ) {
-  const db = new Database();
-  await db.connect(uri, options); // if :memory:, connect to pglite
-  return db;
+  return new Database<T>(uri, options);
 }
 
 export { typemap } from './typemap.js';
