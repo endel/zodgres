@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
+import DefaultSearchDialog from '@/components/search';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -36,7 +37,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             gtag('config', '${GA_TRACKING_ID}');
           `}
         </Script>
-        <RootProvider>{children}</RootProvider>
+        <RootProvider search={{ SearchDialog: DefaultSearchDialog }}>{children}</RootProvider>
       </body>
     </html>
   );
