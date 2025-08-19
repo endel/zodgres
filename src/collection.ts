@@ -1,9 +1,9 @@
 import postgres from 'postgres';
 import * as zod from 'zod';
 import { zodToMappedType, zodUnwrapType } from './typemap.js';
-import { createEnumType, type ColumnDefinition } from './utils.js';
+import { createEnumType, type ColumnDefinition, type SQL } from './utils.js';
 
-const DEFAULT_METHODS = ['now()', 'gen_random_uuid()',];
+const DEFAULT_METHODS = ['now()', 'gen_random_uuid()'];
 
 type InferRequiredId<T> = T extends { id?: infer U }
   ? Omit<T, 'id'> & { id: NonNullable<U> }
@@ -24,9 +24,9 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }} = {};
 
   protected zod: zod.ZodObject<T>;
-  protected sql!: ReturnType<typeof postgres>;
+  protected sql!: SQL;
 
-  constructor(name: string, zodObject: zod.ZodObject<T>, sql: ReturnType<typeof postgres>) {
+  constructor(name: string, zodObject: zod.ZodObject<T>, sql: SQL) {
     this.name = name;
     this.zod = zodObject;
     this.sql = sql;
@@ -113,17 +113,17 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
   ): Promise<R | undefined> {
-    // Check if LIMIT is already present in the query
     let modifiedStrings = strings;
 
+    // Check if LIMIT is already present in the query
     if (/\blimit\b/i.test(strings.join(''))) {
       throw new Error(".selectOne() does not accept LIMIT");
 
     } else {
-      // Add LIMIT 1 to the last string
       const newStrings = [...strings];
       const newRawStrings = [...strings.raw];
 
+      // Add LIMIT 1 to the last string
       newStrings[newStrings.length - 1] = (newStrings[newStrings.length - 1] || '') + ' LIMIT 1';
       newRawStrings[newRawStrings.length - 1] = (newRawStrings[newRawStrings.length - 1] || '') + ' LIMIT 1';
 
@@ -183,6 +183,21 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }
 
   public async migrate() {
+    const migrationSqls = await this.getMigrationSql();
+
+    // Execute all SQL commands
+    for (const migrationSql of migrationSqls) {
+      await this.sql.unsafe(migrationSql);
+    }
+  }
+
+  /**
+   * Get SQL commands needed for migration without executing them
+   * Used for transaction-based migrations
+   */
+  public async getMigrationSql(): Promise<string[]> {
+    const sqls: string[] = [];
+
     // Check if table exists
     const tableExists = await this.sql`
       SELECT EXISTS (
@@ -195,15 +210,26 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
     if (!tableExists[0]?.exists) {
       // Create table if it doesn't exist
-      await this.createTable(zodSchema);
+      const createTableSqls = await this.createTable(zodSchema);
+      sqls.push(...createTableSqls);
+
+      // Populate internal schema for new table
+      this.populateSchemaFromZod(zodSchema);
 
     } else {
       // Get existing columns
       const existingColumns = await this.columns();
 
       // Compare and alter table if needed
-      await this.alterTable(existingColumns, zodSchema);
+      const alterTableSqls = await this.alterTable(existingColumns, zodSchema);
+      sqls.push(...alterTableSqls);
+
+      // Populate internal schema with existing columns and new schema
+      this.populateSchemaFromExisting(existingColumns);
+      this.populateSchemaFromZod(zodSchema);
     }
+
+    return sqls;
   }
 
   public async drop() {
@@ -334,30 +360,29 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return { def: columnDef, updateDb };
   }
 
-  protected async createTable(schema: {[key: string]: ColumnDefinition}) {
-    let sqls: Array<() => Promise<void>> = [];
+  protected async createTable(schema: {[key: string]: ColumnDefinition}): Promise<string[]> {
+    const sqls: string[] = [];
+    let enumSqls: Array<() => Promise<void>> = [];
 
     const columns = Object.entries(schema).map(([name, def]) => {
       const { def: columnDef, updateDb } = this.buildColumnDefinition(name, def);
-      if (updateDb) { sqls.push(updateDb); }
+      if (updateDb) { enumSqls.push(updateDb); }
       return columnDef;
     }).join(', ');
 
-    // Create ENUM types first
-    for (const sql of sqls) {
-      await sql();
+    // Create ENUM types first - execute them directly since they need to be created before the table
+    for (const enumSql of enumSqls) {
+      await enumSql();
     }
 
     const createTableSQL = `CREATE TABLE ${this.name} (${columns})`;
-    // console.log({ createTableSQL });
+    sqls.push(createTableSQL);
 
-    await this.sql.unsafe(createTableSQL);
-
-    // Populate internal schema
-    this.populateSchemaFromZod(schema);
+    return sqls;
   }
 
-  protected async alterTable(existingColumns: any[], newSchema: {[key: string]: ColumnDefinition}) {
+  protected async alterTable(existingColumns: any[], newSchema: {[key: string]: ColumnDefinition}): Promise<string[]> {
+    const sqls: string[] = [];
     const existingColumnMap = new Map();
     existingColumns.forEach(col => {
       existingColumnMap.set(col.column_name, {
@@ -414,24 +439,16 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       }
     }
 
-    // console.log({ preAlterTableCommands, alterTableCommands });
-
-    // Run pre-alter table commands first (to avoid constraint errors)
+    // Add pre-alter table commands first (to avoid constraint errors)
     if (preAlterTableCommands.length > 0) {
-      await this.sql.unsafe(preAlterTableCommands.join('; '));
+      sqls.push(preAlterTableCommands.join('; '));
     }
 
     if (alterTableCommands.length > 0) {
-      // console.log(`ALTER TABLE ${this.name} ${alterTableCommands.join(', ')}`);
-      await this.sql.unsafe(`ALTER TABLE ${this.name} ${alterTableCommands.join(', ')}`);
+      sqls.push(`ALTER TABLE ${this.name} ${alterTableCommands.join(', ')}`);
     }
 
-    // Populate internal schema with existing columns and new schema
-    this.populateSchemaFromExisting(existingColumns);
-    this.populateSchemaFromZod(newSchema);
-
-    // Note: We're not dropping columns that exist in DB but not in schema
-    // This is a safety measure to prevent data loss
+    return sqls;
   }
 
   protected populateSchemaFromZod(schema: {[key: string]: ColumnDefinition}) {

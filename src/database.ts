@@ -3,16 +3,24 @@ import * as zod from 'zod';
 
 import { usePglite } from './pglite.js';
 import { Collection, processSQLValues } from './collection.js';
+import { Migrator } from './migrator.js';
+
+import type { SQL } from './utils.js';
 
 export class Database {
-  public raw!: ReturnType<typeof postgres>;
+  public raw!: SQL;
+
+  /**
+   * Migrator instance
+   */
+  protected migrator!: Migrator;
 
   /**
    * in-memory for local development
    */
   protected pglite?: ReturnType<typeof usePglite>;
 
-  constructor(sql?: ReturnType<typeof postgres>) {
+  constructor(sql?: SQL) {
     if (sql) {
       this.raw = sql;
     }
@@ -48,7 +56,10 @@ export class Database {
     }
   }
 
-  public async connect<T extends Record<string, postgres.PostgresType> = {}> (uri: string, options?: postgres.Options<T> | undefined) {
+  public async connect<T extends Record<string, postgres.PostgresType> = {}> (
+    uri: string,
+    options?: (postgres.Options<T> & { migrations?: string }) | undefined
+  ) {
     if (uri === ":memory:") {
       //
       // Use pglite-socket on development
@@ -73,6 +84,12 @@ export class Database {
     } else {
       this.raw = postgres(uri, options);
     }
+
+    // Create migrator instance after connecting
+    this.migrator = new Migrator(this.raw, options?.migrations);
+    if (options?.migrations) {
+      await this.migrator.runGlobalMigrations();
+    }
   }
 
   public async collection<T extends zod.core.$ZodLooseShape>(
@@ -81,8 +98,28 @@ export class Database {
     params?: string | zod.core.$ZodObjectParams
   ) {
     const collection = new Collection<T>(name, zod.object(shape, params).strict(), this.raw);
-    await collection.migrate();
+
+    await this.migrator.migrateCollection(name, collection, this);
+
     return collection;
+  }
+
+  public getMigrator(): Migrator | undefined {
+    return this.migrator;
+  }
+
+  public async getAppliedMigrations(): Promise<Array<{ migration: string; collection: string | null; applied_at: Date }>> {
+    if (!this.migrator) {
+      return [];
+    }
+    return this.migrator.getAppliedMigrations();
+  }
+
+  public async getPendingMigrations(): Promise<string[]> {
+    if (!this.migrator) {
+      return [];
+    }
+    return this.migrator.getPendingMigrations();
   }
 
   public async close(options?: { timeout?: number | undefined } | undefined) {

@@ -1,5 +1,7 @@
 import postgres from 'postgres';
 
+export type SQL = ReturnType<typeof postgres>;
+
 export interface ColumnDefinition {
   type: string;
   nullable: boolean;
@@ -9,7 +11,7 @@ export interface ColumnDefinition {
 }
 
 export async function createEnumType(
-    sql: ReturnType<typeof postgres>,
+    sql: SQL,
     def: ColumnDefinition
 ) {
     // check if enum exists

@@ -6,6 +6,7 @@
     "schema-definition",
     "collections",
     "raw-queries",
+    "migrations",
     "--- Extra ---",
     "in-memory-database"
   ]

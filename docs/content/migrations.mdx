@@ -1,0 +1,321 @@
+---
+title: Migrations
+description: Zodgres provides a powerful migration system that combines automatic schema migrations with manual migration files for complex database changes.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Automatic Collection Migrations
+
+When you define or modify a collection schema, Zodgres automatically handles the necessary database changes:
+
+### Table Creation
+
+When a collection is used for the first time, Zodgres automatically creates the corresponding PostgreSQL table:
+
+```typescript
+const users = await db.collection('users', {
+  id: z.number().optional(),
+  name: z.string().max(100),
+  email: z.string().email(),
+  created_at: z.date().default(() => new Date())
+});
+
+// This automatically creates:
+// CREATE TABLE users (
+//   id SERIAL PRIMARY KEY,
+//   name VARCHAR(100) NOT NULL,
+//   email TEXT NOT NULL,
+//   created_at TIMESTAMP DEFAULT now()
+// );
+```
+
+### Schema Evolution
+
+When you modify your collection schema, Zodgres automatically generates and applies the necessary `ALTER TABLE` statements:
+
+```typescript
+// Original schema
+const products = await db.collection('products', {
+  id: z.number().optional(),
+  name: z.string().max(100),
+  price: z.number()
+});
+
+// Modified schema - adds new field
+const products = await db.collection('products', {
+  id: z.number().optional(),
+  name: z.string().max(100),
+  price: z.number(),
+  category: z.string().max(50).optional(), // New field
+  description: z.string().optional()       // Another new field
+});
+
+// Automatically generates:
+// ALTER TABLE products
+//   ADD COLUMN category VARCHAR(50),
+//   ADD COLUMN description TEXT;
+```
+
+### Supported Schema Changes
+
+Zodgres automatically handles:
+
+- **Adding new columns** - with proper defaults and nullable constraints
+- **Changing column types** - with automatic casting when possible
+- **Modifying constraints** - nullable/not-null, string length limits
+- **Creating ENUM types** - for `z.enum()` fields
+- **Setting default values** - from Zod defaults
+
+<Callout type="warning">
+**Column renames and deletions are not handled automatically.** These operations require manual migration files to prevent data loss and ensure proper data transformation.
+</Callout>
+
+## Manual Migration Files
+
+For complex data transformations, custom indexes, or operations that can't be automatically generated, you can create manual migration files.
+
+### Migration Directory Structure
+
+Create a `migrations` directory in your project:
+
+```
+project/
+├── migrations/
+│   ├── 001_global_setup.ts        # Global migration
+│   ├── 002_add_indexes.ts         # Another global migration
+│   └── products/                  # Collection-specific migrations
+│       ├── 001_migrate_categories.ts
+│       └── 002_add_search_index.ts
+```
+
+### Global Migrations
+
+Global migrations are executed once per database and are useful for:
+- Creating custom types or functions
+- Setting up database-wide configurations
+- Creating indexes across multiple tables
+
+```typescript
+// migrations/001_global_setup.ts
+import type { SQL } from 'zodgres';
+
+export async function before(sql: SQL) {
+  // Create custom types or extensions
+  await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+  await sql`CREATE EXTENSION IF NOT EXISTS "pg_trgm"`;
+}
+
+export async function after(sql: SQL) {
+  // Setup completed - could add logging or notifications
+  await sql`INSERT INTO migration_log (name, completed_at) VALUES ('global_setup', now())`;
+}
+```
+
+### Collection-Specific Migrations
+
+Collection migrations run before and after the automatic schema migration for a specific collection:
+
+```typescript
+// migrations/products/001_migrate_categories.ts
+import type { Collection, SQL } from 'zodgres';
+
+export async function before(products: Collection, sql: SQL) {
+  // Transform data before schema changes
+  // Example: Convert string categories to enum-compatible values
+  await products.update`
+    category = ${"other"}
+    WHERE category NOT IN ('electronics', 'clothing', 'books', 'other')
+  `;
+}
+
+export async function after(products: Collection, sql: SQL) {
+  // Operations after schema migration
+  // Example: Create indexes, update statistics
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_category ON products (category)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_search ON products USING gin (name gin_trgm_ops)`;
+}
+```
+
+## Adding Database Indexes
+
+While Zodgres doesn't automatically create indexes (except for primary keys), you can easily add them using manual migrations:
+
+### Simple Indexes
+
+```typescript
+// migrations/users/001_add_indexes.ts
+export async function after(users: Collection, sql: SQL) {
+  // Single column index
+  await sql`CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)`;
+
+  // Composite index
+  await sql`CREATE INDEX IF NOT EXISTS idx_users_status_created ON users (status, created_at)`;
+
+  // Partial index
+  await sql`CREATE INDEX IF NOT EXISTS idx_users_active ON users (email) WHERE active = true`;
+}
+```
+
+### Advanced Indexes
+
+```typescript
+// migrations/products/002_search_indexes.ts
+export async function after(products: Collection, sql: SQL) {
+  // Full-text search index
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_search
+            ON products USING gin (to_tsvector('english', name || ' ' || description))`;
+
+  // Trigram index for fuzzy search
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_name_trgm
+            ON products USING gin (name gin_trgm_ops)`;
+
+  // JSON index (if you have JSON columns)
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_metadata
+            ON products USING gin (metadata)`;
+}
+```
+
+## Data Seeding
+
+Use the `after` callback in migration files to seed your database with initial data:
+
+### Basic Seeding
+
+```typescript
+// migrations/categories/001_seed_categories.ts
+export async function after(categories: Collection, sql: SQL) {
+  // Insert initial data
+  await categories.create([
+    { name: 'Electronics', slug: 'electronics' },
+    { name: 'Clothing', slug: 'clothing' },
+    { name: 'Books', slug: 'books' },
+    { name: 'Home & Garden', slug: 'home-garden' }
+  ]);
+}
+```
+
+### Conditional Seeding
+
+```typescript
+// migrations/users/001_create_admin.ts
+export async function after(users: Collection, sql: SQL) {
+  // Only create admin if it doesn't exist
+  const existingAdmin = await users.selectOne`email = ${'admin@example.com'}`;
+
+  if (!existingAdmin) {
+    await users.create({
+      email: 'admin@example.com',
+      name: 'System Administrator',
+      role: 'admin',
+      created_at: new Date()
+    });
+  }
+}
+```
+
+### Complex Data Transformations
+
+```typescript
+// migrations/orders/001_calculate_totals.ts
+export async function after(orders: Collection, sql: SQL) {
+  // Update calculated fields based on related data
+  await sql`
+    UPDATE orders
+    SET total_amount = (
+      SELECT SUM(quantity * price)
+      FROM order_items
+      WHERE order_items.order_id = orders.id
+    )
+    WHERE total_amount IS NULL
+  `;
+}
+```
+
+## Migration Execution Order
+
+Migrations are executed in a specific order to ensure consistency:
+
+1. **Global migrations** - Run first, in alphabetical order
+2. **Collection creation/alteration** - Automatic schema migrations
+3. **Collection-specific migrations** - Run for each collection:
+   - `before()` functions for pending migrations
+   - Automatic schema migration
+   - `after()` functions for pending migrations
+
+<Callout type="warning">
+  All migrations for a collection run within a single database transaction. If any step fails, all changes are rolled back.
+</Callout>
+
+## Best Practices
+
+### Migration File Naming
+
+Use descriptive, sequential names:
+- `001_initial_setup.ts`
+- `002_add_user_indexes.ts`
+- `003_migrate_legacy_data.ts`
+
+### Data Safety
+
+- Always backup your database before running migrations in production
+- Test migrations on a copy of production data
+- Use transactions for complex operations
+- Consider the performance impact of large data transformations
+
+## Example: Complete Migration Workflow
+
+Here's a complete example showing how to evolve a products table:
+
+1. Initial schema
+
+```typescript title="src/db/products.ts"
+const products = await db.collection('products', {
+  id: z.number().optional(),
+  name: z.string().max(100),
+  price: z.number(),
+  category: z.string().max(50)
+});
+```
+
+2. Create migration for enum conversion
+
+```typescript title="migrations/products/001_convert_category_enum.ts"
+export async function before(products: Collection, sql: SQL) {
+  // Clean up invalid categories
+  await products.update`
+    category = 'other'
+    WHERE category NOT IN ('electronics', 'clothing', 'books', 'other')
+  `;
+}
+
+export async function after(products: Collection, sql: SQL) {
+  // Add search capabilities
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_category ON products (category)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_products_name_search
+            ON products USING gin (name gin_trgm_ops)`;
+
+  // Seed some initial products if table is empty
+  const count = await products.count``;
+  if (count === 0) {
+    await products.create([
+      { name: 'Sample Product 1', price: 29.99, category: 'electronics' },
+      { name: 'Sample Product 2', price: 19.99, category: 'books' }
+    ]);
+  }
+}
+```
+
+3. Updated schema with enum
+
+```typescript title="src/db/products.ts"
+const products = await db.collection('products', {
+  id: z.number().optional(),
+  name: z.string().max(100),
+  price: z.number(),
+  category: z.enum(['electronics', 'clothing', 'books', 'other']), // Now an enum
+  description: z.string().optional() // New optional field
+});
+```
+
+This migration system ensures your database evolves safely alongside your application code while maintaining data integrity and providing full control over complex transformations.
