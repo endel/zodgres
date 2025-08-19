@@ -13,6 +13,8 @@ TypeScript-first database collections with static type inference and automatic m
 - ⚡ **SQL Templates** - Use template literals for complex queries
 - 🔄 **Auto-migration** - Automatic table creation from Zod schemas
 
+> **⚠️ Disclaimer**: PGLite support is currently not working. See [issue #1](https://github.com/endel/zodgres/issues/1) for more details.
+
 ## Installation
 
 ```bash
