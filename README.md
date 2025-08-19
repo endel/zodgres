@@ -34,7 +34,7 @@ const users = db.collection('users', {
   age: z.number().min(0).max(100).optional(),
 });
 
-// Open the connection (and Collection migrations)
+// Open the connection and run collection migrations
 await db.open();
 
 // Create records
@@ -66,11 +66,14 @@ Connect to a Postgres database or use in-memory storage for testing:
 
 ```typescript
 // Connect to Postgres
-const db = await connect('postgres://user:password@localhost:5432/mydb');
+const db = connect('postgres://user:password@localhost:5432/mydb');
 
 // Use in-memory database (great for testing)
-const testDb = await connect(':memory:');
+const testDb = connect(':memory:');
 ```
+
+> **Important:** After defining all your collections, you must call `await db.open()` to establish the database connection and run any necessary migrations. This ensures your database schema matches your collection definitions before performing any operations.
+
 
 ### Collection Definition
 
@@ -80,9 +83,9 @@ Create a type-safe collection with Zod schema validation:
 
 ```typescript
 const items = db.collection('items', {
-  id: z.number().optional(),        // auto-incrementing primary key
-  name: z.string().max(100),        // required string with max length
-  price: z.number().positive(),      // required positive number
+  id: z.number().optional(),          // auto-incrementing primary key
+  name: z.string().max(100),          // required string with max length
+  price: z.number().positive(),       // required positive number
   description: z.string().optional(), // optional string
 });
 ```
@@ -139,7 +142,7 @@ describe('My tests', () => {
   let db;
 
   before(async () => {
-    db = await connect(':memory:'); // Uses PGLite
+    db = await connect(':memory:').open(); // Uses PGLite
   });
 
   after(async () => {
