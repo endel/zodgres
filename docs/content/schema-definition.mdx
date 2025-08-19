@@ -146,7 +146,7 @@ const events = db.collection('events', {
   name: z.string(),
   start_time: z.date(),                  // Timestamp
   end_time: z.date(),
-  created_at: z.date().optional(),       // Auto-managed timestamps
+  created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
 ```
