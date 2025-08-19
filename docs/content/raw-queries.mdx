@@ -13,13 +13,13 @@ The `db.sql()` method allows you to execute raw SQL queries while leveraging Zod
 One of the key features of `db.sql()` is that it accepts collection instances directly as table names:
 
 ```typescript
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
   age: z.number().optional(),
 });
 
-const posts = await db.collection('posts', {
+const posts = db.collection('posts', {
   id: z.number().optional(),
   title: z.string(),
   userId: z.number(),

@@ -16,14 +16,17 @@ TypeScript-first database collections with static type inference and automatic m
 import { connect, z } from 'zodgres';
 
 // Connect to database
-const db = await connect('postgres://user:password@localhost:5432/mydb');
+const db = connect('postgres://user:password@localhost:5432/mydb');
 
 // Define a collection with Zod schema
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(), // auto-incrementing
   name: z.string().max(100),
   age: z.number().min(0).max(100).optional(),
 });
+
+// Open the connection and run collection migrations
+await db.open();
 
 // Create records
 const user = await users.create({ name: 'John Doe', age: 30 });

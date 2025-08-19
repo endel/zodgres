@@ -44,7 +44,7 @@ import { connect, z } from 'zodgres';
 const db = await connect(':memory:');
 
 // Define a collection
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
   email: z.string().email(),
@@ -72,7 +72,7 @@ describe('User Operations', () => {
 
   beforeEach(async () => {
     db = await connect(':memory:');
-    users = await db.collection('users', {
+    users = db.collection('users', {
       id: z.number().optional(),
       name: z.string(),
       age: z.number().optional(),

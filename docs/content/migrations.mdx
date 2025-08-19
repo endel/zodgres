@@ -7,19 +7,22 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 ## Automatic Collection Migrations
 
-When you define or modify a collection schema, Zodgres automatically handles the necessary database changes:
+When you define or modify a collection schema, Zodgres automatically handles the necessary database changes when you call `db.open()`.
 
 ### Table Creation
 
 When a collection is used for the first time, Zodgres automatically creates the corresponding PostgreSQL table:
 
 ```typescript
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   name: z.string().max(100),
   email: z.string().email(),
   created_at: z.date().default(() => new Date())
 });
+
+// Open database and trigger migrations
+await db.open();
 
 // This automatically creates:
 // CREATE TABLE users (
@@ -30,20 +33,24 @@ const users = await db.collection('users', {
 // );
 ```
 
+<Callout type="info">
+**Migration Trigger:** Collection migrations are executed automatically when you call `await db.open()` after defining your collections. Make sure to call `db.open()` only after all collections have been defined to ensure all migrations run properly.
+</Callout>
+
 ### Schema Evolution
 
 When you modify your collection schema, Zodgres automatically generates and applies the necessary `ALTER TABLE` statements:
 
 ```typescript
 // Original schema
-const products = await db.collection('products', {
+const products = db.collection('products', {
   id: z.number().optional(),
   name: z.string().max(100),
   price: z.number()
 });
 
 // Modified schema - adds new field
-const products = await db.collection('products', {
+const products = db.collection('products', {
   id: z.number().optional(),
   name: z.string().max(100),
   price: z.number(),
@@ -270,7 +277,7 @@ Here's a complete example showing how to evolve a products table:
 1. Initial schema
 
 ```typescript title="src/db/products.ts"
-const products = await db.collection('products', {
+const products = db.collection('products', {
   id: z.number().optional(),
   name: z.string().max(100),
   price: z.number(),
@@ -309,7 +316,7 @@ export async function after(products: Collection, sql: SQL) {
 3. Updated schema with enum
 
 ```typescript title="src/db/products.ts"
-const products = await db.collection('products', {
+const products = db.collection('products', {
   id: z.number().optional(),
   name: z.string().max(100),
   price: z.number(),

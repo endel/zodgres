@@ -11,15 +11,23 @@ Create a collection by defining a Zod schema:
 ```typescript
 import { connect, z } from 'zodgres';
 
-const db = await connect('postgres://localhost:5432/mydb');
+const db = connect('postgres://localhost:5432/mydb');
 
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),        // Auto-incrementing primary key
   name: z.string().max(100),        // Required string with max length
   email: z.string().email(),        // Required email validation
   age: z.number().min(0).optional(), // Optional positive number
 });
+
+// Open the database connection and run migrations
+await db.open();
 ```
+
+<Callout type="info">
+  **Important:** Always call `db.open()` after defining all your collections. This establishes the database connection and runs any necessary migrations to ensure your database schema matches your collection definitions.
+</Callout>
+
 
 ## Schema Definition
 
@@ -43,7 +51,7 @@ Zodgres maps Zod types to PostgreSQL column types:
 Define auto-incrementing primary keys with optional numbers:
 
 ```typescript
-const products = await db.collection('products', {
+const products = db.collection('products', {
   id: z.number().optional(), // Auto-incrementing primary key
   name: z.string(),
   price: z.number().positive(),
@@ -59,7 +67,7 @@ const products = await db.collection('products', {
 Apply various string constraints:
 
 ```typescript
-const articles = await db.collection('articles', {
+const articles = db.collection('articles', {
   id: z.number().optional(),
   title: z.string().max(200),           // Max length
   slug: z.string().min(3).max(50),      // Min and max length
@@ -73,7 +81,7 @@ const articles = await db.collection('articles', {
 Define numeric constraints and types:
 
 ```typescript
-const orders = await db.collection('orders', {
+const orders = db.collection('orders', {
   id: z.number().optional(),
   total: z.number().positive(),          // Must be positive
   quantity: z.number().int().min(1),     // Integer >= 1
@@ -87,7 +95,7 @@ const orders = await db.collection('orders', {
 Make fields optional with `.optional()`:
 
 ```typescript
-const profiles = await db.collection('profiles', {
+const profiles = db.collection('profiles', {
   id: z.number().optional(),
   user_id: z.number(),                   // Required
   bio: z.string().optional(),            // Optional
@@ -103,7 +111,7 @@ const profiles = await db.collection('profiles', {
 Create unique constraints using the custom `.unique()` method:
 
 ```typescript
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   email: z.string().email().unique(),    // Unique email
   username: z.string().min(3).unique(),  // Unique username
@@ -116,7 +124,7 @@ const users = await db.collection('users', {
 Store complex data as JSON:
 
 ```typescript
-const settings = await db.collection('user_settings', {
+const settings = db.collection('user_settings', {
   id: z.number().optional(),
   user_id: z.number(),
   preferences: z.object({
@@ -133,7 +141,7 @@ const settings = await db.collection('user_settings', {
 Handle timestamps and dates:
 
 ```typescript
-const events = await db.collection('events', {
+const events = db.collection('events', {
   id: z.number().optional(),
   name: z.string(),
   start_time: z.date(),                  // Timestamp
@@ -148,7 +156,7 @@ const events = await db.collection('events', {
 Zodgres provides full TypeScript type inference:
 
 ```typescript
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
   age: z.number().optional(),
@@ -188,7 +196,7 @@ await users.drop();
 - Be explicit with constraints
 
 ```typescript
-const user_profiles = await db.collection('user_profiles', {
+const user_profiles = db.collection('user_profiles', {
   id: z.number().optional(),
   user_id: z.number(),
   first_name: z.string().max(50),

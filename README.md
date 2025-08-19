@@ -24,15 +24,18 @@ npm install zodgres
 ```typescript
 import { connect, z } from 'zodgres';
 
-// Connect to database
-const db = await connect('postgres://user:password@localhost:5432/mydb');
+// Set-up database connection
+const db = connect('postgres://user:password@localhost:5432/mydb');
 
 // Define a collection with Zod schema
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(), // auto-incrementing
   name: z.string().max(100),
   age: z.number().min(0).max(100).optional(),
 });
+
+// Open the connection (and Collection migrations)
+await db.open();
 
 // Create records
 const user = await users.create({ name: 'John Doe', age: 30 });
@@ -76,7 +79,7 @@ const testDb = await connect(':memory:');
 Create a type-safe collection with Zod schema validation:
 
 ```typescript
-const items = await db.collection('items', {
+const items = db.collection('items', {
   id: z.number().optional(),        // auto-incrementing primary key
   name: z.string().max(100),        // required string with max length
   price: z.number().positive(),      // required positive number
@@ -125,22 +128,6 @@ const recent = await items.select`
 `;
 ```
 
-#### `drop()`
-
-Drop the collection table:
-
-```typescript
-await items.drop();
-```
-
-#### `migrate()`
-
-Create or update the table schema:
-
-```typescript
-await items.migrate();
-```
-
 ## Testing
 
 The library supports in-memory databases for fast testing:
@@ -160,7 +147,7 @@ describe('My tests', () => {
   });
 
   it('should create users', async () => {
-    const users = await db.collection('users', {
+    const users = db.collection('users', {
       id: z.number().optional(),
       name: z.string(),
     });
@@ -176,7 +163,7 @@ describe('My tests', () => {
 All data is validated using Zod schemas before database operations:
 
 ```typescript
-const products = await db.collection('products', {
+const products = db.collection('products', {
   id: z.number().optional(),
   name: z.string().min(1).max(100),
   price: z.number().positive(),

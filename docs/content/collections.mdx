@@ -15,17 +15,24 @@ For complex SQL operations, use [`insert()`](#raw-sql-insert) with raw SQL.
 ### Single Record
 
 ```typescript
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
   age: z.number().optional(),
 });
+
+// Open database connection and run migrations
+await db.open();
 
 const user = await users.create({
   name: 'John',
   age: 30,
 });
 ```
+
+<Callout type="warning">
+**Before using collections:** Make sure to call `await db.open()` after defining all your collections. This establishes the database connection and runs migrations before you can perform any operations.
+</Callout>
 
 ### Multiple Records
 
@@ -226,7 +233,7 @@ try {
 All query results are properly typed based on your schema:
 
 ```typescript
-const users = await db.collection('users', {
+const users = db.collection('users', {
   id: z.number().optional(),
   name: z.string(),
   age: z.number().optional(),
