@@ -19,7 +19,7 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
   /**
    * in-memory for local development
    */
-  protected pglite?: ReturnType<typeof usePglite>;
+  protected pglite?: ReturnType<typeof usePglite> | undefined;
 
   /**
    * Collections
@@ -89,7 +89,7 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
     //     process.exit(0);
     //   });
 
-      this.raw = postgres('postgres://localhost:5432');
+      this.raw = postgres('postgres://localhost:5431');
 
     } else {
       this.raw = postgres(uri, options);
@@ -120,9 +120,10 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
   }
 
   public async open() {
-    await this.connect(this.uri, this.options);
-
-    this.isOpen = true;
+    if (!this.isOpen) {
+      await this.connect(this.uri, this.options);
+      this.isOpen = true;
+    }
 
     for (const name in this.collections) {
       await this.migrator.migrateCollection(name, this.collections[name]!, this);
@@ -132,9 +133,11 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
   }
 
   public async close(options?: { timeout?: number | undefined } | undefined) {
+    await this.raw.end(options);
     if (this.pglite) {
       await this.pglite.close();
+      this.pglite = undefined;
     }
-    await this.raw.end(options);
+    this.isOpen = false;
   }
 }

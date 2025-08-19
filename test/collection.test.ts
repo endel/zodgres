@@ -15,17 +15,29 @@ describe("collection", () => {
     await sql.begin(async (sql) => {
       await sql`DROP TABLE IF EXISTS users`;
       await sql`DROP TABLE IF EXISTS items`;
-      await sql`DROP TABLE IF EXISTS uuid_auto_increment`;
-      await sql`DROP TABLE IF EXISTS uuid_types`;
+      await sql`DROP TABLE IF EXISTS mixed_defaults`;
       await sql`DROP TABLE IF EXISTS auto_increment_id`;
       await sql`DROP TABLE IF EXISTS auto_incrementing_test`;
       await sql`DROP TABLE IF EXISTS mixed_objects_test`;
       await sql`DROP TABLE IF EXISTS unique_test`;
       await sql`DROP TABLE IF EXISTS unique_optional_test`;
       await sql`DROP TABLE IF EXISTS number_to_string`;
+      await sql`DROP TABLE IF EXISTS update_users`;
+      await sql`DROP TABLE IF EXISTS text_to_enum`;
+      await sql`DROP TABLE IF EXISTS nullable_to_not_null`;
+      await sql`DROP TABLE IF EXISTS arbitrary_columns`;
+      await sql`DROP TABLE IF EXISTS numeric_types`;
+      await sql`DROP TABLE IF EXISTS string_types`;
+      await sql`DROP TABLE IF EXISTS date_types`;
+      await sql`DROP TABLE IF EXISTS uuid_auto_increment`;
+      await sql`DROP TABLE IF EXISTS uuid_types`;
+      await sql`DROP TABLE IF EXISTS boolean_types`;
+      await sql`DROP TABLE IF EXISTS boolean_default_types`;
+      await sql`DROP TABLE IF EXISTS boolean_optional_types`;
+      await sql`DROP TABLE IF EXISTS boolean_default_optional_types`;
       await sql`DROP TABLE IF EXISTS create_enum_type`;
       await sql`DROP TABLE IF EXISTS update_enum_type`;
-      await sql`DROP TABLE IF EXISTS arbitrary_columns`;
+      await sql`DROP TABLE IF EXISTS jsonb_types`;
     });
     await sql.end();
 
@@ -781,7 +793,7 @@ describe("collection", () => {
         id: z.number().optional(),
         age: z.number().min(0).max(100),
       });
-      await init(users1);
+      await openDb(db);
 
       await users1.create([{ age: 25 }, { age: 30 },]);
 
@@ -795,6 +807,7 @@ describe("collection", () => {
         id: z.number().optional(),
         age: z.string(),
       });
+      await users2.migrate();
 
       await users2.update`age = age || ${" updated!"}`;
       const users2Rows = await users2.select();
@@ -840,6 +853,7 @@ describe("collection", () => {
       const c2 = db.collection("nullable_to_not_null", {
         value: z.number().default(0),
       });
+      await c2.migrate();
 
       assert.deepStrictEqual(await c2.select(), [
         { value: 3 },
