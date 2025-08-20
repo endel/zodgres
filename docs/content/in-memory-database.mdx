@@ -47,7 +47,7 @@ Connect to an in-memory database using the `:memory:` connection string:
 import { connect, z } from 'zodgres';
 
 // Create in-memory database
-const db = await connect(':memory:');
+const db = connect(':memory:');
 
 // Define a collection
 const users = db.collection('users', {
@@ -56,6 +56,8 @@ const users = db.collection('users', {
   email: z.string().email(),
   age: z.number().optional(),
 });
+
+await db.open();
 
 // Use normally
 await users.create({ name: 'Alice', email: 'alice@example.com', age: 28 });
@@ -77,12 +79,13 @@ describe('User Operations', () => {
   let db, users;
 
   beforeEach(async () => {
-    db = await connect(':memory:');
+    db = connect(':memory:');
     users = db.collection('users', {
       id: z.number().optional(),
       name: z.string(),
       age: z.number().optional(),
     });
+    await db.open()
   });
 
   afterEach(async () => {

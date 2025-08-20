@@ -81,10 +81,10 @@ Connect to a PostgreSQL database using a connection string:
 
 ```typescript
 // Local database
-const db = await connect('postgres://postgres:password@localhost:5432/myapp');
+const db = connect('postgres://postgres:password@localhost:5432/myapp');
 
 // Remote database with options
-const db = await connect('postgres://user:pass@host:5432/db', {
+const db = connect('postgres://user:pass@host:5432/db', {
   max: 10,          // Maximum connections
   ssl: 'prefer',    // SSL mode
 });

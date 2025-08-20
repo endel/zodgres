@@ -17,7 +17,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://username:password@db-postgresql-nyc1-12345-do-user-123456-0.b.db.ondigitalocean.com:25060/defaultdb',
       {
         ssl: 'require',
@@ -48,7 +48,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://username:password@vultr-prod-12345.vultrdb.com:5432/defaultdb',
       {
         ssl: 'require',
@@ -79,7 +79,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://username:password@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname',
       {
         ssl: 'require',
@@ -107,7 +107,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:5432/postgres',
       {
         ssl: 'require',
@@ -135,7 +135,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://username:password@your-rds-endpoint.region.rds.amazonaws.com:5432/dbname',
       {
         ssl: 'require',
@@ -165,7 +165,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://username:password@your-instance-ip:5432/dbname',
       {
         ssl: {
@@ -196,7 +196,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(
+    const db = connect(
       'postgres://username@servername:password@servername.postgres.database.azure.com:5432/dbname',
       {
         ssl: 'require',
@@ -225,7 +225,7 @@ Zodgres works seamlessly with any PostgreSQL-compatible database, including all 
     ```typescript
     import { connect } from 'zodgres';
 
-    const db = await connect(process.env.DATABASE_URL, {
+    const db = connect(process.env.DATABASE_URL, {
       ssl: 'require',
     });
     ```
@@ -247,7 +247,7 @@ Store connection strings securely using environment variables:
 ```typescript
 import { connect } from 'zodgres';
 
-const db = await connect(process.env.DATABASE_URL, {
+const db = connect(process.env.DATABASE_URL, {
   ssl: process.env.NODE_ENV === 'production' ? 'require' : false,
   max: parseInt(process.env.DB_POOL_SIZE || '10'),
 });
@@ -258,7 +258,7 @@ const db = await connect(process.env.DATABASE_URL, {
 Configure appropriate connection pooling for your application:
 
 ```typescript
-const db = await connect(connectionString, {
+const db = connect(connectionString, {
   max: 20,                    // Maximum connections
   idle_timeout: 30,           // Close idle connections after 30s
   max_lifetime: 60 * 30,      // Close connections after 30 minutes
@@ -271,12 +271,12 @@ Most cloud providers require SSL. Configure it appropriately:
 
 ```typescript
 // Basic SSL requirement
-const db = await connect(connectionString, {
+const db = connect(connectionString, {
   ssl: 'require',
 });
 
 // Custom SSL configuration
-const db = await connect(connectionString, {
+const db = connect(connectionString, {
   ssl: {
     rejectUnauthorized: false,  // For self-signed certificates
     ca: fs.readFileSync('ca-certificate.crt').toString(),
@@ -293,7 +293,7 @@ import { connect } from 'zodgres';
 
 async function connectToDatabase() {
   try {
-    const db = await connect(process.env.DATABASE_URL, {
+    const db = connect(process.env.DATABASE_URL, {
       ssl: 'require',
       connect_timeout: 10,  // 10 second timeout
     });
@@ -315,7 +315,7 @@ async function connectToDatabase() {
 Monitor your database connections:
 
 ```typescript
-const db = await connect(connectionString, {
+const db = connect(connectionString, {
   onnotice: (notice) => console.log('DB Notice:', notice),
   onparameter: (key, value) => console.log(`DB Param ${key}:`, value),
 });
