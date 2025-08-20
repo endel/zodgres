@@ -11,8 +11,8 @@ type InferRequiredId<T> = T extends { id?: infer U }
   : T;
 
 export class Collection<T extends zod.core.$ZodLooseShape = any> {
-  public 'Type': zod.infer<typeof this.zod>;
-  public 'OutputType': InferRequiredId<this['Type']>;
+  public 'Row': zod.infer<typeof this.zod>;
+  public 'RowOutput': InferRequiredId<this['Row']>;
 
   public name: string;
 
@@ -37,11 +37,11 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return this.db.raw;
   }
 
-  public parse(input: zod.input<typeof this.zod>): this['Type'] {
+  public parse(input: zod.input<typeof this.zod>): this['Row'] {
     return this.zod.parse(input);
   }
 
-  public async insert<R = this['OutputType']>(
+  public async insert<R = this['RowOutput']>(
     strings: TemplateStringsArray,
     ...values: any[]
   ): Promise<R[]> {
@@ -59,9 +59,9 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       this.convertRowFromDatabase(row)) as R[];
   }
 
-  public async create(input: zod.input<typeof this.zod>): Promise<this['OutputType']>;
-  public async create(inputs: zod.input<typeof this.zod>[]): Promise<this['OutputType'][]>;
-  public async create(inputOrInputs: zod.input<typeof this.zod> | zod.input<typeof this.zod>[]): Promise<this['OutputType'] | this['OutputType'][]> {
+  public async create(input: zod.input<typeof this.zod>): Promise<this['RowOutput']>;
+  public async create(inputs: zod.input<typeof this.zod>[]): Promise<this['RowOutput'][]>;
+  public async create(inputOrInputs: zod.input<typeof this.zod> | zod.input<typeof this.zod>[]): Promise<this['RowOutput'] | this['RowOutput'][]> {
     const sql = this.sql;
 
     // handle array of inputs
@@ -78,7 +78,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       }
 
       const results = await sql`INSERT INTO ${sql.unsafe(this.name)} ${sql(dataArray)} RETURNING *`;
-      return results.map((result: any, index: number) => ({ ...result, ...inputOrInputs[index] })) as this['OutputType'][];
+      return results.map((result: any, index: number) => ({ ...result, ...inputOrInputs[index] })) as this['RowOutput'][];
 
     } else {
       // handle single input
@@ -93,11 +93,11 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
         RETURNING *
       `;
 
-      return { ...result[0], ...data } as this['OutputType'];
+      return { ...result[0], ...data } as this['RowOutput'];
     }
   }
 
-  public async select<R = this['OutputType']>(
+  public async select<R = this['RowOutput']>(
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
   ): Promise<R[]> {
@@ -114,7 +114,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       this.convertRowFromDatabase(row)) as R[];
   }
 
-  public async selectOne<R = this['OutputType']>(
+  public async selectOne<R = this['RowOutput']>(
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
   ): Promise<R | undefined> {
@@ -139,7 +139,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return results[0] as R | undefined;
   }
 
-  public async update<R = this['OutputType']>(
+  public async update<R = this['RowOutput']>(
     strings: TemplateStringsArray,
     ...values: any[]
   ): Promise<R[]> {
@@ -583,7 +583,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     return Object.assign(newStrings, { raw: newRawStrings }) as TemplateStringsArray;
   }
 
-  protected parseWithDefaults(input: zod.input<typeof this.zod>): this['Type'] {
+  protected parseWithDefaults(input: zod.input<typeof this.zod>): this['Row'] {
     const withDefaults: any = this.zod.parse(input);
 
     for (const [fieldName, zodType] of Object.entries(this.zod.shape)) {
@@ -598,7 +598,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       }
     }
 
-    return withDefaults as this['Type'];
+    return withDefaults as this['Row'];
   }
 
 }

@@ -26,4 +26,4 @@ export function connect<T extends Record<string, postgres.PostgresType> = {}>(
 export { typemap } from './typemap.js';
 
 // Utility type to extract the inferred type from a Collection
-export type Row<T> = T extends Collection<infer U> ? Collection<U>['Type'] : never;
+export type Row<T> = T extends Collection<infer U> ? Collection<U>['Row'] : never;
