@@ -137,6 +137,8 @@ const recent = await items.select`
 
 The library supports in-memory databases for fast testing:
 
+> ⚠️ PGLite support is currently not working. See [issue #1](https://github.com/endel/zodgres/issues/1) for more details.
+
 ```typescript
 import { connect, z } from 'zodgres';
 

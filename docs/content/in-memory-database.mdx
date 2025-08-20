@@ -4,7 +4,13 @@ description: Using PGlite for in-memory PostgreSQL database operations
 icon: Database
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
+
 Zodgres supports using PGlite, a lightweight PostgreSQL implementation that runs entirely in memory. This is particularly useful for testing, prototyping, and scenarios where you need a temporary database without external dependencies.
+
+<Callout type="warning">
+**Disclaimer:** PGLite support is currently not working. See [issue #1](https://github.com/endel/zodgres/issues/1) for more details.
+</Callout>
 
 ## Installation
 
