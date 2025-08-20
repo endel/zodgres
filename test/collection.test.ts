@@ -173,6 +173,20 @@ describe("collection", () => {
         ]);
       });
 
+      describe("aggregate", () => {
+        it("should aggregate", async () => {
+          const users = await getUsersCollection();
+          await users.create([
+            { name: "Alice", age: 25 },
+            { name: "Bob", age: 30 },
+            { name: "Charlie", age: 35 },
+          ]);
+
+          const aggregate = await users.select<{ avg: 'string' }>`AVG(age) WHERE age IS NOT NULL`;
+          assert.deepStrictEqual(aggregate, [{ avg: '30.0000000000000000' }]);
+        });
+      });
+
     });
 
     describe("select one", () => {

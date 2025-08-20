@@ -91,7 +91,7 @@ const topUsers = await users.select`* ORDER BY id LIMIT ${5}`;
 
 ```typescript
 const countResult = await users.select<{ count: string }>`COUNT(*)`;
-const avgAge = await users.select`AVG(age) WHERE age IS NOT NULL`;
+const avgAge = await users.select<{ avg: string }>`AVG(age) WHERE age IS NOT NULL`;
 ```
 
 ## Single Record
