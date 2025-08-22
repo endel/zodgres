@@ -134,11 +134,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray,
     ...values: any[]
   ): Promise<postgres.RowList<R[]>> {
-    // Check if RETURNING is already present in the query
-    const hasReturning = strings.some(str => /\bRETURNING\b/i.test(str));
-    const suffix = hasReturning ? '' : 'RETURNING *';
-
-    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'UPDATE', suffix, values);
+    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'UPDATE', '', values);
 
     const result = await this.sql<Readonly<R>[]>(newStrings, ...processedValues);
 

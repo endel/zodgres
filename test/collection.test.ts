@@ -284,6 +284,7 @@ describe("collection", () => {
         // Update all records with same name
         const updated = await items.update`name = ${"Updated"} WHERE id = ${2}`;
         assert.strictEqual(updated.count, 1);
+        assert.deepStrictEqual([...updated], []);
 
         const updatedReturning = await items.update`name = ${"Updated"} WHERE id = ${2} RETURNING *`;
         assert.deepStrictEqual([...updatedReturning], [{ id: 2, name: "Updated" }]);
@@ -337,7 +338,7 @@ describe("collection", () => {
         ]);
 
         // Update all records
-        const updated = await items.update`name = ${"All Updated"}`;
+        const updated = await items.update`name = ${"All Updated"} RETURNING *`;
         // Sort by id for consistent comparison
         updated.sort((a, b) => (a.id as number) - (b.id as number));
         assert.deepStrictEqual([...updated], [
@@ -363,7 +364,7 @@ describe("collection", () => {
         ]);
 
         // Update specific fields with multiple conditions
-        const updated = await users.update`age = ${31}, active = ${true} WHERE name = ${"Bob"}`;
+        const updated = await users.update`age = ${31}, active = ${true} WHERE name = ${"Bob"} RETURNING *`;
         assert.deepStrictEqual([...updated], [
           { id: 2, name: "Bob", age: 31, active: true },
         ]);
