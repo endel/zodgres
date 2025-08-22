@@ -11,6 +11,7 @@ describe('migration scripts', () => {
         await db.raw`DROP TABLE IF EXISTS products`;
         await db.raw`DROP TABLE IF EXISTS migrations`;
         await db.raw`DROP TYPE IF EXISTS products_category_enum`;
+        await db.raw`DROP TABLE IF EXISTS tags`;
         await db.close();
     });
 
@@ -101,5 +102,34 @@ describe('migration scripts', () => {
 
         await db.close();
         await db2.close();
+    });
+
+    it('should allow seeding data on "after" hook', async () => {
+        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
+            migrations: path.resolve(__dirname, 'migrations'),
+            onnotice: () => { }
+        });
+
+        const tags = db.collection('tags', {
+            id: z.number().optional(),
+            name: z.string().max(100),
+        });
+
+        await db.open();
+
+        await tags.create([
+            { name: 'clothing' },
+            { name: 'books' }
+        ]);
+
+        const tagsData = await tags.select();
+        assert.deepStrictEqual([...tagsData], [
+            { id: 1, name: 'electronics' },
+            { id: 2, name: 'other' },
+            { id: 3, name: 'clothing' },
+            { id: 4, name: 'books' }
+        ]);
+
+        await db.close();
     });
 });

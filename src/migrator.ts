@@ -114,53 +114,56 @@ export class Migrator {
   }
 
   /**
-   * Run complete collection migration within a single transaction
-   * Includes before migrations, collection migrate, and after migrations
+   * Run complete collection migration with transaction only for collection step
+   * 1. "before" migration hook
+   * 2. Collection migration
+   * 3. "after" migration hook
    */
   async migrateCollection(collectionName: string, collection: Collection, database: Database): Promise<void> {
     const hasMigrationFiles = this.hasMigrationFiles();
+    let pendingMigrations: string[] = [];
 
-    return await this.sql.begin(async (sql) => {
-      let pendingMigrations: string[] = [];
-      if (hasMigrationFiles) {
-        // Get list of applied collection migrations
-        const appliedMigrations = await sql`SELECT migration FROM migrations WHERE collection = ${collectionName} ORDER BY migration`;
-        const appliedMigrationPaths = new Set(appliedMigrations.map(row => row.migration));
+    if (hasMigrationFiles) {
+      // Get list of applied collection migrations
+      const appliedMigrations = await this.sql`SELECT migration FROM migrations WHERE collection = ${collectionName} ORDER BY migration`;
+      const appliedMigrationPaths = new Set(appliedMigrations.map(row => row.migration));
 
-        // Get list of collection migration files
-        pendingMigrations = this.getCollectionMigrationFiles(collectionName)
-          .filter(file => !appliedMigrationPaths.has(file));
+      // Get list of collection migration files
+      pendingMigrations = this.getCollectionMigrationFiles(collectionName)
+        .filter(file => !appliedMigrationPaths.has(file));
+    }
 
-        // Run before migrations for pending migrations
-        await this.runCollectionMigrationPhaseForFiles(collectionName, collection, database, 'before', pendingMigrations);
-      }
+    // Step 1: Run before migrations (no transaction)
+    if (hasMigrationFiles && pendingMigrations.length > 0) {
+      await this.runCollectionMigrationPhaseForFiles(collectionName, collection, 'before', pendingMigrations, this.sql);
+    }
 
-      // Run collection migrate - get SQL commands and execute them within transaction
+    // Step 2: Run collection migration SQL (with transaction)
+    await this.sql.begin(async (sql) => {
       const migrationSqls = await collection.getMigrationSql();
       for (const migrationSql of migrationSqls) {
         await sql.unsafe(migrationSql);
       }
-
-      if (hasMigrationFiles) {
-        // Run after migrations for pending migrations
-        await this.runCollectionMigrationPhaseForFiles(collectionName, collection, database, 'after', pendingMigrations);
-
-        // Record all pending migrations as applied
-        for (const migrationFile of pendingMigrations) {
-          await sql`
-            INSERT INTO migrations (migration, collection)
-            VALUES (${migrationFile}, ${collectionName})
-          `;
-        }
-      }
-
     });
+
+    // Step 3: Run after migrations and record applied migrations (no transaction)
+    if (hasMigrationFiles && pendingMigrations.length > 0) {
+      await this.runCollectionMigrationPhaseForFiles(collectionName, collection, 'after', pendingMigrations, this.sql);
+
+      // Record all pending migrations as applied
+      for (const migrationFile of pendingMigrations) {
+        await this.sql`
+          INSERT INTO migrations (migration, collection)
+          VALUES (${migrationFile}, ${collectionName})
+        `;
+      }
+    }
   }
 
   /**
    * Run collection migration phase for specific migration files
    */
-  private async runCollectionMigrationPhaseForFiles(collectionName: string, collection: any, database: any, phase: 'before' | 'after', migrationFiles: string[]): Promise<void> {
+  private async runCollectionMigrationPhaseForFiles(collectionName: string, collection: any, phase: 'before' | 'after', migrationFiles: string[], sql?: SQL): Promise<void> {
     if (migrationFiles.length === 0) {
       return;
     }
@@ -177,7 +180,7 @@ export class Migrator {
 
         if (typeof migrationFunction === 'function') {
           // console.log(`Running ${phase} migration for ${collectionName}: ${migrationFile}`);
-          await migrationFunction(collection, database);
+          await migrationFunction(collection, sql);
           // console.log(`${phase} migration for ${collectionName} completed: ${migrationFile}`);
         }
       } catch (error) {
