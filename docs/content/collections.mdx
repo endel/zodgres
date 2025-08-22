@@ -105,16 +105,31 @@ const user = await users.selectOne`* WHERE name = ${'John'}`;
 
 ## Updating Records
 
-Update records and return the updated data.
+Update records and return the number of updated records. If you want to return the updated data, use the `RETURNING` clause.
 
 ### Basic Updates
 
 ```typescript
 const updated = await users.update`name = ${'John'} WHERE id = ${1}`;
+console.log(updated.count); // 1
+
 const multi = await users.update`age = ${25} WHERE name = ${'Bob'}`;
+console.log(updated.count); // 1
 ```
 
 ### Multiple Fields
+
+You may pass an object to the first argument to update multiple fields at once:
+
+```typescript
+const updated = await users.update`
+  ${{ name: 'Jane', age: 31 }}
+  WHERE id = ${2}
+`;
+```
+
+Or, you may fill in the fields manually:
+
 
 ```typescript
 const updated = await users.update`
@@ -123,19 +138,23 @@ const updated = await users.update`
 `;
 ```
 
+### Returning Data
+
+You may use the `RETURNING` clause to return the updated data:
+
+```typescript
+const updated = await users.update`
+  ${{ name: 'Jane', age: 31 }}
+  WHERE id = ${2}
+  RETURNING *
+`;
+```
+
 ### All Records
 
 ```typescript
 const allUpdated = await users.update`status = ${'active'}`;
-```
-
-### Complex Conditions
-
-```typescript
-const updated = await users.update`
-  status = ${'inactive'}
-  WHERE id IN (${1}, ${3}, ${5})
-`;
+console.log(allUpdated.count); // 100
 ```
 
 ## Deleting Records

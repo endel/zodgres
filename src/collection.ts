@@ -45,17 +45,11 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray,
     ...values: any[]
   ): Promise<R[]> {
-    const newStrings = this.buildSqlTemplateStrings(
-      strings,
-      'INSERT INTO',
-      /\b(ON\s+CONFLICT|RETURNING)\b/i, // SQL keywords that should come after the VALUES clause
-      '',
-      'RETURNING *'
-    );
+    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'INSERT INTO', 'RETURNING *', values);
 
-    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
+    const result = await this.sql(newStrings, ...processedValues);
 
-    return result.map((row: any, _: number) =>
+    return [...result].map((row: any, _: number) =>
       this.convertRowFromDatabase(row)) as R[];
   }
 
@@ -100,18 +94,15 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   public async select<R = this['RowOutput']>(
     strings: TemplateStringsArray = Object.assign(["*"], { raw: ["*"] }),
     ...values: any[]
-  ): Promise<R[]> {
-    const newStrings = this.buildSqlTemplateStrings(
-      strings,
-      'SELECT',
-      /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, // SQL keywords that should come after the FROM clause
-      'FROM'
-    );
+  ): Promise<postgres.RowList<R[]>> {
+    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'SELECT', '', values);
 
-    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
+    const result = await this.sql<Readonly<R>[]>(newStrings, ...processedValues);
 
-    return result.map((row: any, _: number) =>
-      this.convertRowFromDatabase(row)) as R[];
+    result.forEach((row: any, i: number) =>
+      result[i] = this.convertRowFromDatabase(row));
+
+    return result;
   }
 
   public async selectOne<R = this['RowOutput']>(
@@ -142,19 +133,19 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   public async update<R = this['RowOutput']>(
     strings: TemplateStringsArray,
     ...values: any[]
-  ): Promise<R[]> {
-    const newStrings = this.buildSqlTemplateStrings(
-      strings,
-      'UPDATE',
-      /\b(WHERE|ORDER\s+BY|LIMIT|OFFSET)\b/i, // SQL keywords that should come after the SET clause
-      'SET',
-      'RETURNING *'
-    );
+  ): Promise<postgres.RowList<R[]>> {
+    // Check if RETURNING is already present in the query
+    const hasReturning = strings.some(str => /\bRETURNING\b/i.test(str));
+    const suffix = hasReturning ? '' : 'RETURNING *';
 
-    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
+    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'UPDATE', suffix, values);
 
-    return result.map((row: any, _: number) =>
-      this.convertRowFromDatabase(row)) as R[];
+    const result = await this.sql<Readonly<R>[]>(newStrings, ...processedValues);
+
+    result.forEach((row: any, i: number) =>
+      result[i] = this.convertRowFromDatabase(row));
+
+    return result;
   }
 
   public async delete(): Promise<number>;
@@ -164,14 +155,9 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray = Object.assign([""], { raw: [""] }),
     ...values: any[]
   ): Promise<R | R[] | number> {
-    const newStrings = this.buildSqlTemplateStrings(
-      strings,
-      'DELETE',
-      /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, // SQL keywords that should come after the FROM clause,
-      'FROM',
-    );
+    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'DELETE', '', values);
 
-    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
+    const result = await this.sql(newStrings, ...processedValues);
 
     return (result.length > 0)
       ? [...result] as R[]
@@ -182,8 +168,8 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
     strings: TemplateStringsArray = Object.assign([""], { raw: [""] }),
     ...values: any[]
   ): Promise<number> {
-    const newStrings = this.buildSqlTemplateStrings(strings, 'SELECT COUNT(*)', /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i, 'FROM');
-    const result = await this.sql(newStrings, ...processSQLValues(this.sql, values));
+    const [newStrings, processedValues] = this.buildSqlTemplateStrings(strings, 'SELECT COUNT(*)', '', values);
+    const result = await this.sql(newStrings, ...processedValues);
     return (result[0] && parseInt(result[0].count)) ?? 0;
   }
 
@@ -520,67 +506,150 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
 
   protected buildSqlTemplateStrings(
     strings: TemplateStringsArray,
-    prefix: string,
-    keywordRegex: RegExp,
-    insertKeyword: string,
-    suffix: string = ''
-  ): TemplateStringsArray {
-    const firstString = strings[0] ?? (prefix === 'SELECT' ? "*" : "");
-    const firstRawString = strings.raw[0] ?? (prefix === 'SELECT' ? "*" : "");
+    sqlCommand: string,
+    suffix: string = '',
+    values: any[] = []
+  ): [TemplateStringsArray, any[]] {
+    const firstString = strings[0] ?? "";
+    const firstRawString = strings.raw[0] ?? "";
 
-    // Check if the first string contains keywords that should come after the insert keyword
-    const match = firstString.match(keywordRegex);
+    // Extract the base command from sqlCommand (e.g., "SELECT" from "SELECT COUNT(*)")
+    const baseCommand = sqlCommand.split(' ')[0]?.toUpperCase() ?? '';
 
-    let modifiedFirstString: string;
-    let modifiedFirstRawString: string;
+    let newStrings: string[];
+    let newRawStrings: string[];
 
-    if (match) {
-      // Insert keyword before the first keyword that should come after it
-      const keywordIndex = match.index!;
-      const beforeKeyword = firstString.substring(0, keywordIndex).trim();
-      const afterKeyword = firstString.substring(keywordIndex);
+    switch (baseCommand) {
+      case 'SELECT': {
+        // Handle SELECT and SELECT COUNT(*) cases
+        const isSimpleSelect = sqlCommand === 'SELECT';
 
-      if (insertKeyword === 'FROM') {
-        modifiedFirstString = `${beforeKeyword} ${insertKeyword} ${this.name} ${afterKeyword}`;
-      } else {
-        modifiedFirstString = `${insertKeyword} ${beforeKeyword} ${afterKeyword}`;
+        // Keywords that should come after FROM
+        const fromKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i;
+        const match = firstString.match(fromKeywords);
+
+        if (match) {
+          const keywordIndex = match.index!;
+          const beforeKeyword = firstString.substring(0, keywordIndex).trim();
+          const afterKeyword = firstString.substring(keywordIndex);
+
+          const rawKeywordIndex = firstRawString.search(fromKeywords);
+          const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
+          const afterKeywordRaw = firstRawString.substring(rawKeywordIndex);
+
+          if (isSimpleSelect) {
+            newStrings = [`SELECT ${beforeKeyword} FROM ${this.name} ${afterKeyword}`, ...strings.slice(1)];
+            newRawStrings = [`SELECT ${beforeKeywordRaw} FROM ${this.name} ${afterKeywordRaw}`, ...strings.raw.slice(1)];
+          } else {
+            // For SELECT COUNT(*), etc.
+            newStrings = [`${sqlCommand} FROM ${this.name} ${afterKeyword}`, ...strings.slice(1)];
+            newRawStrings = [`${sqlCommand} FROM ${this.name} ${afterKeywordRaw}`, ...strings.raw.slice(1)];
+          }
+        } else {
+          if (isSimpleSelect) {
+            const selectColumns = firstString || "*";
+            const selectColumnsRaw = firstRawString || "*";
+            newStrings = [`SELECT ${selectColumns} FROM ${this.name}`, ...strings.slice(1)];
+            newRawStrings = [`SELECT ${selectColumnsRaw} FROM ${this.name}`, ...strings.raw.slice(1)];
+          } else {
+            // For SELECT COUNT(*), etc.
+            newStrings = [`${sqlCommand} FROM ${this.name}${firstString ? ' ' + firstString : ''}`, ...strings.slice(1)];
+            newRawStrings = [`${sqlCommand} FROM ${this.name}${firstRawString ? ' ' + firstRawString : ''}`, ...strings.raw.slice(1)];
+          }
+        }
+        break;
       }
 
-      const rawKeywordIndex = firstRawString.search(keywordRegex);
-      const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
-      const afterKeywordRaw = firstRawString.substring(rawKeywordIndex);
+      case 'INSERT': {
+        // Keywords that should come after VALUES
+        const insertKeywords = /\b(ON\s+CONFLICT|RETURNING)\b/i;
+        const match = firstString.match(insertKeywords);
 
-      if (insertKeyword === 'FROM') {
-        modifiedFirstRawString = `${beforeKeywordRaw} ${insertKeyword} ${this.name} ${afterKeywordRaw}`;
-      } else {
-        modifiedFirstRawString = `${insertKeyword} ${beforeKeywordRaw} ${afterKeywordRaw}`;
+        if (match) {
+          const keywordIndex = match.index!;
+          const beforeKeyword = firstString.substring(0, keywordIndex).trim();
+          const afterKeyword = firstString.substring(keywordIndex);
+
+          const rawKeywordIndex = firstRawString.search(insertKeywords);
+          const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
+          const afterKeywordRaw = firstRawString.substring(rawKeywordIndex);
+
+          newStrings = [`INSERT INTO ${this.name} ${beforeKeyword} ${afterKeyword}`, ...strings.slice(1)];
+          newRawStrings = [`INSERT INTO ${this.name} ${beforeKeywordRaw} ${afterKeywordRaw}`, ...strings.raw.slice(1)];
+        } else {
+          newStrings = [`INSERT INTO ${this.name} ${firstString}`, ...strings.slice(1)];
+          newRawStrings = [`INSERT INTO ${this.name} ${firstRawString}`, ...strings.raw.slice(1)];
+        }
+        break;
       }
-    } else {
-      // No keywords found, handle based on the insert keyword
-      if (insertKeyword === 'FROM') {
-        modifiedFirstString = `${firstString} ${insertKeyword} ${this.name}`;
-        modifiedFirstRawString = `${firstRawString} ${insertKeyword} ${this.name}`;
-      } else {
-        modifiedFirstString = `${insertKeyword} ${firstString}`;
-        modifiedFirstRawString = `${insertKeyword} ${firstRawString}`;
+
+      case 'UPDATE': {
+        // Keywords that should come after SET
+        const updateKeywords = /\b(WHERE|ORDER\s+BY|LIMIT|OFFSET|RETURNING)\b/i;
+        const match = firstString.match(updateKeywords);
+
+        // Transform the first value if it's an object
+        if (values.length > 0 && values[0] && typeof values[0] === 'object' && !Array.isArray(values[0])) {
+          // use sql(obj, [...keys]) to build the SET clause
+          values = [this.sql(values[0], Object.keys(values[0])), ...values.slice(1)];
+        }
+
+        if (match) {
+          const keywordIndex = match.index!;
+          const beforeKeyword = firstString.substring(0, keywordIndex).trim();
+          const afterKeyword = firstString.substring(keywordIndex);
+
+          const rawKeywordIndex = firstRawString.search(updateKeywords);
+          const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
+          const afterKeywordRaw = firstRawString.substring(rawKeywordIndex);
+
+          newStrings = [`UPDATE ${this.name} SET ${beforeKeyword} ${afterKeyword}`, ...strings.slice(1)];
+          newRawStrings = [`UPDATE ${this.name} SET ${beforeKeywordRaw} ${afterKeywordRaw}`, ...strings.raw.slice(1)];
+        } else {
+          newStrings = [`UPDATE ${this.name} SET ${firstString}`, ...strings.slice(1)];
+          newRawStrings = [`UPDATE ${this.name} SET ${firstRawString}`, ...strings.raw.slice(1)];
+        }
+        break;
       }
+
+      case 'DELETE': {
+        // Keywords that should come after FROM
+        const deleteKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET|RETURNING)\b/i;
+        const match = firstString.match(deleteKeywords);
+
+        if (match) {
+          const keywordIndex = match.index!;
+          const beforeKeyword = firstString.substring(0, keywordIndex).trim();
+          const afterKeyword = firstString.substring(keywordIndex);
+
+          const rawKeywordIndex = firstRawString.search(deleteKeywords);
+          const beforeKeywordRaw = firstRawString.substring(0, rawKeywordIndex).trim();
+          const afterKeywordRaw = firstRawString.substring(rawKeywordIndex);
+
+          newStrings = [`DELETE${beforeKeyword ? ' ' + beforeKeyword : ''} FROM ${this.name} ${afterKeyword}`, ...strings.slice(1)];
+          newRawStrings = [`DELETE${beforeKeywordRaw ? ' ' + beforeKeywordRaw : ''} FROM ${this.name} ${afterKeywordRaw}`, ...strings.raw.slice(1)];
+        } else {
+          newStrings = [`DELETE FROM ${this.name}${firstString ? ' ' + firstString : ''}`, ...strings.slice(1)];
+          newRawStrings = [`DELETE FROM ${this.name}${firstRawString ? ' ' + firstRawString : ''}`, ...strings.raw.slice(1)];
+        }
+        break;
+      }
+
+      default:
+        throw new Error(`Unsupported SQL command: ${baseCommand}`);
     }
 
-    const finalStrings = suffix ? strings.slice(1, -1) : strings.slice(1);
-    const finalRawStrings = suffix ? strings.raw.slice(1, -1) : strings.raw.slice(1);
+    // Handle suffix (like RETURNING * for INSERT)
+    if (suffix) {
+      const lastIndex = newStrings.length - 1;
+      newStrings[lastIndex] = `${newStrings[lastIndex]} ${suffix}`;
+      newRawStrings[lastIndex] = `${newRawStrings[lastIndex]} ${suffix}`;
+    }
 
-    const lastString = suffix ? `${strings[strings.length - 1] || ""} ${suffix}` : "";
-    const lastRawString = suffix ? `${strings.raw[strings.raw.length - 1] || ""} ${suffix}` : "";
-
-    const newStrings = suffix
-      ? [`${prefix} ${this.name} ${modifiedFirstString}`, ...finalStrings, lastString]
-      : [`${prefix} ${modifiedFirstString}`, ...finalStrings];
-
-    const newRawStrings = suffix
-      ? [`${prefix} ${this.name} ${modifiedFirstRawString}`, ...finalRawStrings, lastRawString]
-      : [`${prefix} ${modifiedFirstRawString}`, ...finalRawStrings];
-
-    return Object.assign(newStrings, { raw: newRawStrings }) as TemplateStringsArray;
+    return [
+      Object.assign(newStrings, { raw: newRawStrings }) as TemplateStringsArray,
+      processSQLValues(this.sql, values)
+    ];
   }
 
   protected parseWithDefaults(input: zod.input<typeof this.zod>): this['Row'] {

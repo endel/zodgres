@@ -100,10 +100,10 @@ describe("collection", () => {
         const items = await getItemsCollection();
 
         const inserted = await items.insert`(name) VALUES (${"Raw Insert Test"})`;
-        assert.deepStrictEqual(inserted, [{ id: 1, name: "Raw Insert Test" }]);
+        assert.deepStrictEqual([...inserted], [{ id: 1, name: "Raw Insert Test" }]);
 
         const all = await items.select`* ORDER BY id`;
-        assert.deepStrictEqual(all, [
+        assert.deepStrictEqual([...all], [
           { id: 1, name: "Raw Insert Test" },
         ]);
       });
@@ -144,7 +144,7 @@ describe("collection", () => {
         ]);
 
         const all = await items.select`*`;
-        assert.deepStrictEqual(all, [
+        assert.deepStrictEqual([...all], [
           { id: 1, name: "One" },
           { id: 2, name: "Two" },
           { id: 3, name: "Three" },
@@ -165,7 +165,7 @@ describe("collection", () => {
 
         const all = await items.select();
 
-        assert.deepStrictEqual(all, [
+        assert.deepStrictEqual([...all], [
           { id: 1, name: "One" },
           { id: 2, name: "Two" },
           { id: 3, name: "Three" },
@@ -183,7 +183,7 @@ describe("collection", () => {
           ]);
 
           const aggregate = await users.select<{ avg: 'string' }>`AVG(age) WHERE age IS NOT NULL`;
-          assert.deepStrictEqual(aggregate, [{ avg: '30.0000000000000000' }]);
+          assert.deepStrictEqual(aggregate[0].avg, '30.0000000000000000');
         });
       });
 
@@ -222,7 +222,7 @@ describe("collection", () => {
         ]);
 
         const three = await items.select`* WHERE name = ${"Three"}`;
-        assert.deepStrictEqual(three, [{ id: 3, name: "Three" }]);
+        assert.deepStrictEqual([...three], [{ id: 3, name: "Three" }]);
       });
 
     });
@@ -240,11 +240,14 @@ describe("collection", () => {
 
         // Update all records with same name
         const updated = await items.update`name = ${"Updated"} WHERE id = ${2}`;
-        assert.deepStrictEqual(updated, [{ id: 2, name: "Updated" }]);
+        assert.strictEqual(updated.count, 1);
+
+        const updatedReturning = await items.update`name = ${"Updated"} WHERE id = ${2} RETURNING *`;
+        assert.deepStrictEqual([...updatedReturning], [{ id: 2, name: "Updated" }]);
 
         // Verify the update worked
         const all = await items.select`* ORDER BY id`;
-        assert.deepStrictEqual(all, [
+        assert.deepStrictEqual([...all], [
           { id: 1, name: "One" },
           { id: 2, name: "Updated" },
           { id: 3, name: "Three" },
@@ -263,17 +266,17 @@ describe("collection", () => {
         ]);
 
         // Update multiple records
-        const updated = await items.update`name = ${"Multi-Updated"} WHERE id IN (${1}, ${3})`;
+        const updated = await items.update`name = ${"Multi-Updated"} WHERE id IN (${1}, ${3}) RETURNING *`;
         // Sort by id for consistent comparison
         updated.sort((a, b) => (a.id as number) - (b.id as number));
-        assert.deepStrictEqual(updated, [
+        assert.deepStrictEqual([...updated], [
           { id: 1, name: "Multi-Updated" },
           { id: 3, name: "Multi-Updated" },
         ]);
 
         // Verify the updates worked
         const all = await items.select`* ORDER BY id`;
-        assert.deepStrictEqual(all, [
+        assert.deepStrictEqual([...all], [
           { id: 1, name: "Multi-Updated" },
           { id: 2, name: "Two" },
           { id: 3, name: "Multi-Updated" },
@@ -294,7 +297,7 @@ describe("collection", () => {
         const updated = await items.update`name = ${"All Updated"}`;
         // Sort by id for consistent comparison
         updated.sort((a, b) => (a.id as number) - (b.id as number));
-        assert.deepStrictEqual(updated, [
+        assert.deepStrictEqual([...updated], [
           { id: 1, name: "All Updated" },
           { id: 2, name: "All Updated" },
           { id: 3, name: "All Updated" },
@@ -318,13 +321,13 @@ describe("collection", () => {
 
         // Update specific fields with multiple conditions
         const updated = await users.update`age = ${31}, active = ${true} WHERE name = ${"Bob"}`;
-        assert.deepStrictEqual(updated, [
+        assert.deepStrictEqual([...updated], [
           { id: 2, name: "Bob", age: 31, active: true },
         ]);
 
         // Verify Bob was updated correctly
         const bob = await users.select`* WHERE name = ${"Bob"}`;
-        assert.deepStrictEqual(bob, [{ id: 2, name: "Bob", age: 31, active: true }]);
+        assert.deepStrictEqual([...bob], [{ id: 2, name: "Bob", age: 31, active: true }]);
       });
 
       it("should return empty array when no records match WHERE condition", async () => {
@@ -336,15 +339,31 @@ describe("collection", () => {
         ]);
 
         // Try to update non-existent record
-        const updated = await items.update`name = ${"Updated"} WHERE id = ${999}`;
-        assert.deepStrictEqual(updated, []);
+        const updated = await items.update`name = ${"Updated"} WHERE id = ${999} RETURNING *`;
+        assert.strictEqual(updated.count, 0);
+        assert.deepStrictEqual([...updated], []);
 
         // Verify original records are unchanged
         const all = await items.select`* ORDER BY id`;
-        assert.deepStrictEqual(all, [
+        assert.deepStrictEqual([...all], [
           { id: 1, name: "One" },
           { id: 2, name: "Two" },
         ]);
+      });
+
+      it("should return number of updated records", async () => {
+        const items = await getItemsCollection();
+        await items.create([{ name: "One" }, { name: "Two" }]);
+        const updated = await items.update`name = ${"Updated"}`;
+        assert.deepStrictEqual(updated.count, 2);
+      });
+
+      it("should build SET fields if first argument is an object", async () => {
+        const items = await getItemsCollection();
+        await items.create([{ name: "One" }, { name: "Two" }]);
+
+        const updated = await items.update`${{ name: "Updated" }} RETURNING name`;
+        assert.deepStrictEqual([...updated], [{ name: "Updated" }, { name: "Updated" }]);
       });
     });
 
@@ -398,7 +417,7 @@ describe("collection", () => {
         ]);
 
         await c.create([{}, {}]);
-        assert.deepStrictEqual(await c.select(), [
+        assert.deepStrictEqual([...await c.select()], [
           { id: 1, name: undefined },
           { id: 2, name: undefined },
         ]);
@@ -415,7 +434,7 @@ describe("collection", () => {
         ]);
 
         await c.create([{}, {}]);
-        assert.deepStrictEqual(await c.select(), [
+        assert.deepStrictEqual([...await c.select()], [
           { id: 1, },
           { id: 2, },
         ]);
@@ -433,7 +452,7 @@ describe("collection", () => {
         await c.create([{}, { name: "Alice" }, { age: 25 }, { name: "Bob" }]);
         const results = await c.select();
 
-        assert.deepStrictEqual(results, [
+        assert.deepStrictEqual([...results], [
           { id: 1, name: undefined, age: undefined },  // empty object uses defaults
           { id: 2, name: "Alice", age: undefined },  // object with data
           { id: 3, name: undefined, age: 25 },  // empty object uses defaults
@@ -454,7 +473,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: Math.PI }, { value: 3.14 }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
       it("float32 = real", async () => {
@@ -560,7 +579,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: "123e4567-e89b-12d3-a456-426614174000" }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
 
         const newRow = await c.create({});
         assert.ok(c.parse(newRow).value);
@@ -577,7 +596,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: "123e4567-e89b-12d3-a456-426614174000" }, { value: "123e4567-e89b-12d3-a456-426614174001" }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
     });
@@ -594,7 +613,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: true }, { value: false }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
       it("boolean with default", async () => {
@@ -607,7 +626,7 @@ describe("collection", () => {
         ]);
 
         await c.create([{}]);
-        assert.deepStrictEqual(await c.select(), [{ value: true }]);
+        assert.deepStrictEqual([...await c.select()], [{ value: true }]);
       });
 
       it("boolean optional", async () => {
@@ -621,7 +640,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: true }, { value: false }, {}];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), [
+        assert.deepStrictEqual([...await c.select()], [
           { value: true },
           { value: false },
           { value: undefined }
@@ -638,7 +657,7 @@ describe("collection", () => {
         ]);
 
         await c.create([{}, { value: true }]);
-        assert.deepStrictEqual(await c.select(), [
+        assert.deepStrictEqual([...await c.select()], [
           { value: false },
           { value: true }
         ]);
@@ -659,7 +678,7 @@ describe("collection", () => {
 
         const insertRows: EnumCollection[] = [{ value: "electronics" }, { value: "books" }, { value: "clothing" }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
       it("update enum type", async () => {
@@ -682,7 +701,7 @@ describe("collection", () => {
 
         const insertRows: EnumCollection[] = [{ value: "electronics" }, { value: "books" }, { value: "clothing" }, { value: "furniture" }];
         await c2.create(insertRows);
-        assert.deepStrictEqual(await c2.select(), insertRows);
+        assert.deepStrictEqual([...await c2.select()], insertRows);
       });
 
     });
@@ -699,7 +718,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: ["one", "two", "three"] }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
       it("z.object()", async () => {
@@ -716,7 +735,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: { name: "John", age: 30 } }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
       it("z.record()", async () => {
@@ -730,7 +749,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: { "John": 30 } }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
 
       it("z.any()", async () => {
@@ -744,7 +763,7 @@ describe("collection", () => {
 
         const insertRows = [{ value: "test" }, { value: 123 }, { value: { name: "John", age: 30 } }, { value: { "John": 30 } }];
         await c.create(insertRows);
-        assert.deepStrictEqual(await c.select(), insertRows);
+        assert.deepStrictEqual([...await c.select()], insertRows);
       });
     });
 
@@ -812,7 +831,7 @@ describe("collection", () => {
       await users1.create([{ age: 25 }, { age: 30 },]);
 
       const users1Rows = await users1.select();
-      assert.deepStrictEqual(users1Rows, [
+      assert.deepStrictEqual([...users1Rows], [
         { id: 1, age: 25 },
         { id: 2, age: 30 },
       ]);
@@ -825,7 +844,7 @@ describe("collection", () => {
 
       await users2.update`age = age || ${" updated!"}`;
       const users2Rows = await users2.select();
-      assert.deepStrictEqual(users2Rows, [
+      assert.deepStrictEqual([...users2Rows], [
         { id: 1, age: "25 updated!" },
         { id: 2, age: "30 updated!" },
       ]);
@@ -843,7 +862,7 @@ describe("collection", () => {
         value: z.enum(['one', 'two', 'three']),
       });
 
-      assert.deepStrictEqual(await c2.select(), [
+      assert.deepStrictEqual([...await c2.select()], [
         { value: "one" },
         { value: "two" },
         { value: "three" },
@@ -858,7 +877,7 @@ describe("collection", () => {
       await openDb(db);
 
       await c.create([{}, {}, { value: 3 }]);
-      assert.deepStrictEqual(await c.select(), [
+      assert.deepStrictEqual([...await c.select()], [
         { value: undefined },
         { value: undefined },
         { value: 3 },
@@ -869,7 +888,7 @@ describe("collection", () => {
       });
       await c2.migrate();
 
-      assert.deepStrictEqual(await c2.select(), [
+      assert.deepStrictEqual([...await c2.select()], [
         { value: 3 },
         { value: 0 },
         { value: 0 },
@@ -893,7 +912,7 @@ describe("collection", () => {
       ]);
 
       const rows = await c.select`name`;
-      assert.deepStrictEqual(rows, [ { name: "John" }, { name: "Jane" } ]);
+      assert.deepStrictEqual([...rows], [ { name: "John" }, { name: "Jane" } ]);
     });
 
     it("arbitrary count", async () => {
@@ -910,7 +929,7 @@ describe("collection", () => {
       ]);
 
       const rows = await c.select<{ count: number }>`COUNT(*)`;
-      assert.deepStrictEqual(rows, [ { count: '2' } ]);
+      assert.deepStrictEqual([...rows], [ { count: '2' } ]);
     });
 
   });
