@@ -27,11 +27,17 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
   protected collections: Record<string, Collection> = {};
 
   protected uri!: string;
-  protected options!: (postgres.Options<T> & { migrations?: string }) | undefined;
+  protected options: (postgres.Options<T> & { migrations?: string });
 
-  constructor(uri: string, options?: (postgres.Options<T> & { migrations?: string }) | undefined) {
+  constructor(uri: string, options: postgres.Options<T> & { migrations?: string } = {}) {
     this.uri = uri;
     this.options = options;
+
+    // ignore all notices by default
+    if (!options.onnotice) {
+      options.onnotice = () => { };
+    }
+
     // @ts-ignore
     this.raw = (...args: any[]) => Promise.reject('Database not connected');
   }

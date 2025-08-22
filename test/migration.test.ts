@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('migration scripts', () => {
     before(async() => {
-        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres", { onnotice: () => { } }).open();
+        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres").open();
         await db.raw`DROP TABLE IF EXISTS products`;
         await db.raw`DROP TABLE IF EXISTS migrations`;
         await db.raw`DROP TYPE IF EXISTS products_category_enum`;
@@ -17,7 +17,7 @@ describe('migration scripts', () => {
 
     it('should run a migration script before migrating a collection', async () => {
         // Step 1: Create initial data with string category field
-        const db1 = connect("postgres://postgres:postgres@localhost:5432/postgres", { onnotice: () => { } })
+        const db1 = connect("postgres://postgres:postgres@localhost:5432/postgres")
         const products1 = db1.collection('products', {
             id: z.number().optional(),
             category: z.string().max(100),

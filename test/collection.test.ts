@@ -11,8 +11,8 @@ describe("collection", () => {
 
   let openDb = async (db: Database) => {
     // drop all collections before connecting with Database
-    const sql = postgres(db['uri'], { debug: false, onnotice: () => {} });
-    await sql.begin(async (sql) => {
+    const ndb = await connect(db['uri']).open();
+    await ndb.raw.begin(async (sql) => {
       await sql`DROP TABLE IF EXISTS users`;
       await sql`DROP TABLE IF EXISTS items`;
       await sql`DROP TABLE IF EXISTS mixed_defaults`;
@@ -39,7 +39,7 @@ describe("collection", () => {
       await sql`DROP TABLE IF EXISTS update_enum_type`;
       await sql`DROP TABLE IF EXISTS jsonb_types`;
     });
-    await sql.end();
+    await ndb.close();
 
     await db.open();
   }
