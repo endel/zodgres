@@ -4,8 +4,8 @@ import postgres from 'postgres';
 import { zod } from './zod-ext.js';
 export { zod as z };
 
-import { Database } from './database.js';
-export { Database };
+import { Database, type DatabaseOptions } from './database.js';
+export { Database, type DatabaseOptions };
 
 import { Collection } from './collection.js';
 export { Collection };
@@ -18,7 +18,7 @@ export type { SQL };
 
 export function connect<T extends Record<string, postgres.PostgresType> = {}>(
   uri: string,
-  options?: (postgres.Options<T> & { migrations?: string }) | undefined
+  options: DatabaseOptions<T> = {}
 ) {
   return new Database<T>(uri, options);
 }

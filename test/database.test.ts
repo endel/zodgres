@@ -4,7 +4,7 @@ import { connect, Database, z } from "../src/index.js";
 describe("database", () => {
   let db: Database;
 
-  before(async () => db = connect("postgres://postgres:postgres@localhost:5432/postgres", { onnotice: () => {} }))
+  before(async () => db = connect("postgres://postgres:postgres@localhost:5432/postgres", { debug: false }))
   after(async () => { await db.close(); })
 
   it("should allow to connect to 'pglite'", async () => {

@@ -525,7 +525,7 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
         const isSimpleSelect = sqlCommand === 'SELECT';
 
         // Keywords that should come after FROM
-        const fromKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET)\b/i;
+        const fromKeywords = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING|LIMIT|OFFSET|LEFT\s+JOIN|RIGHT\s+JOIN|INNER\s+JOIN|FULL\s+JOIN)\b/i;
         const match = firstString.match(fromKeywords);
 
         if (match) {

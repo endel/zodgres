@@ -7,6 +7,9 @@ import { Migrator } from './migrator.js';
 
 import type { SQL } from './utils.js';
 
+export type DatabaseOptions<T extends Record<string, postgres.PostgresType> = {}> = postgres.Options<T> &
+  { migrations?: string };
+
 export class Database<T extends Record<string, postgres.PostgresType> = {}> {
   public raw!: SQL;
   public isOpen = false;
@@ -36,6 +39,30 @@ export class Database<T extends Record<string, postgres.PostgresType> = {}> {
     // ignore all notices by default
     if (!options.onnotice) {
       options.onnotice = () => { };
+    }
+
+    if (options.debug !== false) {
+      options.debug = (typeof (options.debug) === 'function')
+        ? options.debug
+        : (connection, query, params, types) => {
+          // Extracted from: https://github.com/porsager/postgres/issues/1074#issuecomment-3018488468
+          if (query.includes('b.oid')) return; // internal query from the library to get the types
+          const truncatedParams = params.map((p) => {
+            if (typeof p === 'boolean') return p.toString().toUpperCase();
+            if (Array.isArray(p)) return p.map((el) => `'${el}'`).join(',');
+            if (typeof p !== 'string') return p;
+            if (p.length < 100) return `'${p}'`;
+            return `'${p.slice(0, 8)}...${p.slice(-8)}'`;
+          });
+          let replacedQuery = query
+            .trim()
+            .replace(/\$\d+/g, (m) => truncatedParams[Number(m.slice(1)) - 1]);
+          if (!replacedQuery.endsWith(';')) replacedQuery += ';';
+          replacedQuery = replacedQuery
+            .replace(/--.*/g, '') // remove comments
+            .replace(/\s+/g, ' '); // remove line break
+          console.log('🔍', replacedQuery);
+        };
     }
 
     // @ts-ignore

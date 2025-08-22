@@ -1,6 +1,6 @@
 {
   "name": "zodgres",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Postgres.js + Zod",
   "type": "module",
   "scripts": {

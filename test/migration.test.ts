@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('migration scripts', () => {
     before(async() => {
-        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres").open();
+        const db = await connect("postgres://postgres:postgres@localhost:5432/postgres", { debug: false }).open();
         await db.raw`DROP TABLE IF EXISTS products`;
         await db.raw`DROP TABLE IF EXISTS migrations`;
         await db.raw`DROP TYPE IF EXISTS products_category_enum`;
@@ -45,7 +45,7 @@ describe('migration scripts', () => {
         // Step 2: Connect with migrations path - this should run the migration
         const db2 = connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations'),
-            onnotice: () => { }
+            debug: false
         });
 
         // Step 3: Create collection with enum constraint - this should work after migration
@@ -88,12 +88,12 @@ describe('migration scripts', () => {
         // Connect again with migrations - should not re-run migrations
         const db = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations'),
-            onnotice: () => { }
+            debug: false
         }).open();
 
         const db2 = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations'),
-            onnotice: () => { }
+            debug: false
         }).open();
 
         // Verify migration count hasn't changed
@@ -107,7 +107,7 @@ describe('migration scripts', () => {
     it('should allow seeding data on "after" hook', async () => {
         const db = await connect("postgres://postgres:postgres@localhost:5432/postgres", {
             migrations: path.resolve(__dirname, 'migrations'),
-            onnotice: () => { }
+            debug: false
         });
 
         const tags = db.collection('tags', {

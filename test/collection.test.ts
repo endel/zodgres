@@ -11,10 +11,12 @@ describe("collection", () => {
 
   let openDb = async (db: Database) => {
     // drop all collections before connecting with Database
-    const ndb = await connect(db['uri']).open();
+    const ndb = await connect(db['uri'], { debug: false }).open();
     await ndb.raw.begin(async (sql) => {
       await sql`DROP TABLE IF EXISTS users`;
       await sql`DROP TABLE IF EXISTS items`;
+      await sql`DROP TABLE IF EXISTS teams`;
+      await sql`DROP TABLE IF EXISTS players`;
       await sql`DROP TABLE IF EXISTS mixed_defaults`;
       await sql`DROP TABLE IF EXISTS auto_increment_id`;
       await sql`DROP TABLE IF EXISTS auto_incrementing_test`;
@@ -44,7 +46,7 @@ describe("collection", () => {
     await db.open();
   }
 
-  beforeEach(() => db = connect("postgres://postgres:postgres@localhost:5432/postgres"));
+  beforeEach(() => db = connect("postgres://postgres:postgres@localhost:5432/postgres", { debug: false }));
   afterEach(async () => await db.close());
 
   const getItemsCollection = async () => {
@@ -186,6 +188,47 @@ describe("collection", () => {
           assert.deepStrictEqual(aggregate[0].avg, '30.0000000000000000');
         });
       });
+
+      describe("joins", () => {
+        it("left join", async () => {
+          const teams = db.collection("teams", {
+            id: z.number().optional(),
+            name: z.string().max(100),
+          });
+          const players = db.collection("players", {
+            id: z.number().optional(),
+            name: z.string().max(100),
+            team_id: z.number().optional(),
+          });
+          await openDb(db);
+
+          await teams.create([
+            { name: "Team 1" },
+            { name: "Team 2" },
+          ]);
+
+          await players.create([
+            { name: "Player 1", team_id: 1 },
+            { name: "Player 2", team_id: 1 },
+            { name: "Player 3", team_id: 2 },
+          ]);
+
+          const results = await players.select`players.*, teams.name as team_name LEFT JOIN ${teams} ON ${teams}.id = ${players}.team_id ORDER BY players.id`;
+          assert.deepStrictEqual([...results], [
+            { id: 1, name: "Player 1", team_id: 1, team_name: "Team 1" },
+            { id: 2, name: "Player 2", team_id: 1, team_name: "Team 1" },
+            { id: 3, name: "Player 3", team_id: 2, team_name: "Team 2" },
+          ]);
+
+          // TODO: fix this
+          // const results2 = await players.select`${players}.*, ${teams}.name as team_name LEFT JOIN ${teams} ON ${teams}.id = ${players}.team_id ORDER BY players.id`;
+          // assert.deepStrictEqual([...results2], [
+          //   { id: 1, name: "Player 1", team_id: 1, team_name: "Team 1" },
+          //   { id: 2, name: "Player 2", team_id: 1, team_name: "Team 1" },
+          //   { id: 3, name: "Player 3", team_id: 2, team_name: "Team 2" },
+          // ]);
+        })
+      })
 
     });
 
