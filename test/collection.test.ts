@@ -1,7 +1,6 @@
 import assert from "assert";
 import { connect, Database, typemap, z, type Row } from "../src/index.js";
 import { init } from "./utils.js";
-import postgres from "postgres";
 
 describe("collection", () => {
   let db: Database;

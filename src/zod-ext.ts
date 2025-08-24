@@ -7,9 +7,8 @@
  * - `isUnique()` function to check if a Zod type has a unique constraint
  *
  */
+import type { ZodType as OriginalZodType } from "zod";
 import * as z from 'zod';
-
-const uniqueConstraints = new WeakMap<z.ZodType, boolean>();
 
 declare module "zod" {
   interface ZodType {
@@ -18,14 +17,9 @@ declare module "zod" {
 }
 
 // TODO: Wrap on a custom ZodUnique type instead - like z.ZodOptional.
-z.ZodType.prototype.unique = function() {
-  uniqueConstraints.set(this, true);
-  return this;
+z.ZodType.prototype.unique = function(this: OriginalZodType) {
+  return this.meta({ unique: true });
 };
-
-export function isUnique(zodType: z.ZodType): boolean {
-  return uniqueConstraints.has(zodType) && uniqueConstraints.get(zodType) === true;
-}
 
 // Re-export zod with extensions
 export const zod = z;
