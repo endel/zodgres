@@ -10,13 +10,31 @@
 import type { ZodType as OriginalZodType } from "zod";
 import * as z from 'zod';
 
+export interface ZodgresMeta {
+  primaryKey?: boolean;
+  serial?: boolean;
+  unique?: boolean;
+  [key: string]: any;
+}
+
 declare module "zod" {
   interface ZodType {
+    meta(meta: ZodgresMeta): this;
+    // shorthands for meta
     unique(): this;
+    serial(): this;
+    primaryKey(): this;
   }
 }
 
-// TODO: Wrap on a custom ZodUnique type instead - like z.ZodOptional.
+z.ZodType.prototype.primaryKey = function(this: OriginalZodType) {
+  return this.meta({ primaryKey: true });
+};
+
+z.ZodType.prototype.serial = function(this: OriginalZodType) {
+  return this.meta({ serial: true });
+};
+
 z.ZodType.prototype.unique = function(this: OriginalZodType) {
   return this.meta({ unique: true });
 };

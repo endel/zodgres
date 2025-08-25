@@ -21,7 +21,7 @@ describe("database", () => {
 
   it("should handle Collection instances in sql method", async function() {
     const coll = db.collection("test_sql_method", {
-      id: z.number().optional(),
+      id: z.number().serial(),
       name: z.string()
     });
     await db.open();

@@ -1,4 +1,5 @@
 import * as zod from 'zod';
+import type { ZodgresMeta } from './zod-ext.js';
 
 export const typemap = {
     number: "numeric",
@@ -26,12 +27,11 @@ export const typemap = {
 };
 
 export function zodUnwrapType(zodProperty: zod.ZodType) {
-    const meta = zodProperty.meta();
+    const meta = zodProperty.meta() as ZodgresMeta;
 
     let nullable = false;
     let defaultValue: any = undefined;
     let currentType: any = zodProperty;
-    let unique = meta?.unique === true;
 
     // Handle wrapped types (Optional, Nullable, Default)
     while (currentType) {
@@ -55,7 +55,7 @@ export function zodUnwrapType(zodProperty: zod.ZodType) {
         type: currentType,
         nullable,
         defaultValue,
-        unique,
+        meta,
     }
 }
 

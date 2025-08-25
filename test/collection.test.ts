@@ -50,7 +50,7 @@ describe("collection", () => {
 
   const getItemsCollection = async () => {
     const items = db.collection("items", {
-      id: z.number().optional(),
+      id: z.number(),
       name: z.string().max(100),
     });
     await openDb(db);
@@ -59,7 +59,7 @@ describe("collection", () => {
 
   const getUsersCollection = async () => {
     const users = db.collection("users", {
-      id: z.number().optional(),
+      id: z.number().serial(),
       name: z.string().max(100),
       age: z.number().min(0).max(100).optional(),
     });
@@ -191,11 +191,11 @@ describe("collection", () => {
       describe("joins", () => {
         it("left join", async () => {
           const teams = db.collection("teams", {
-            id: z.number().optional(),
+            id: z.number().serial(),
             name: z.string().max(100),
           });
           const players = db.collection("players", {
-            id: z.number().optional(),
+            id: z.number().serial(),
             name: z.string().max(100),
             team_id: z.number().optional(),
           });
@@ -349,7 +349,7 @@ describe("collection", () => {
 
       it("should work with complex collections", async () => {
         const users = db.collection("update_users", {
-          id: z.number().optional(),
+          id: z.number().serial(),
           name: z.string().max(100),
           age: z.number().min(0).max(100).optional(),
           active: z.boolean().optional(),
@@ -450,7 +450,7 @@ describe("collection", () => {
     describe("auto-incrementing id", () => {
       it("should create a table with an auto-incrementing id", async () => {
         const c = db.collection("auto_increment_id", {
-          id: z.number().optional(),
+          id: z.number().serial(),
           name: z.string().optional(),
         });
         await openDb(db);
@@ -469,7 +469,7 @@ describe("collection", () => {
       xit("should create a table with an auto-incrementing id", async () => {
         // this test fails: batch inserting empty objects with table having only an auto-incrementing id
         const c = db.collection("auto_increment_id", {
-          id: z.number().optional(),
+          id: z.number().serial(),
         });
         await openDb(db);
         assert.deepStrictEqual([...await c.columns()], [
@@ -485,7 +485,7 @@ describe("collection", () => {
 
       it("should handle mixed arrays with empty and populated objects", async () => {
         const c = db.collection("mixed_defaults", {
-          id: z.number().optional(),
+          id: z.number().serial(),
           name: z.string().optional(),
           age: z.number().optional(),
         });
@@ -599,7 +599,7 @@ describe("collection", () => {
     describe("uuid types", () => {
       it("primary key as uuid (auto-incrementing)", async () => {
         const c = db.collection("uuid_auto_increment", {
-          id: z.uuid().optional(),
+          id: z.uuid().serial(),
           name: z.string(),
         });
         await openDb(db);
@@ -815,7 +815,7 @@ describe("collection", () => {
   describe("unique constraints", () => {
     it("should create column with unique constraint", async () => {
       const c = db.collection("unique_test", {
-        id: z.number().optional(),
+        id: z.number().serial(),
         email: z.string().unique(),
         username: z.string().max(50).unique(),
       });
@@ -844,7 +844,7 @@ describe("collection", () => {
 
     it("should work with optional unique fields", async () => {
       const c = db.collection("unique_optional_test", {
-        id: z.number().optional(),
+        id: z.number().serial(),
         code: z.string().optional().unique(),
       });
 
@@ -866,7 +866,7 @@ describe("collection", () => {
   describe("alter table", () => {
     it("should convert integer fields to varchar", async () => {
       const users1 = db.collection("number_to_string", {
-        id: z.number().optional(),
+        id: z.number().serial(),
         age: z.number().min(0).max(100),
       });
       await openDb(db);
@@ -880,7 +880,7 @@ describe("collection", () => {
       ]);
 
       const users2 = db.collection("number_to_string", {
-        id: z.number().optional(),
+        id: z.number().serial(),
         age: z.string(),
       });
       await users2.migrate();
@@ -943,7 +943,7 @@ describe("collection", () => {
   describe("querying", () => {
     it("should allow to select arbitrary columns", async () => {
       const c = db.collection("arbitrary_columns", {
-        id: z.number().optional(),
+        id: z.number().serial(),
         name: z.string(),
         age: z.number(),
       });
@@ -960,7 +960,7 @@ describe("collection", () => {
 
     it("arbitrary count", async () => {
       const c = db.collection("arbitrary_columns", {
-        id: z.number().optional(),
+        id: z.number().serial(),
         name: z.string(),
         age: z.number(),
       });

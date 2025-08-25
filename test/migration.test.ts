@@ -19,7 +19,7 @@ describe('migration scripts', () => {
         // Step 1: Create initial data with string category field
         const db1 = connect("postgres://postgres:postgres@localhost:5432/postgres")
         const products1 = db1.collection('products', {
-            id: z.number().optional(),
+            id: z.number().serial(),
             category: z.string().max(100),
         });
         await db1.open();
@@ -50,7 +50,7 @@ describe('migration scripts', () => {
 
         // Step 3: Create collection with enum constraint - this should work after migration
         const products2 = db2.collection('products', {
-            id: z.number().optional(),
+            id: z.number().serial(),
             category: z.enum(['electronics', 'other']),
         });
 
@@ -111,7 +111,7 @@ describe('migration scripts', () => {
         });
 
         const tags = db.collection('tags', {
-            id: z.number().optional(),
+            id: z.number().serial(),
             name: z.string().max(100),
         });
 

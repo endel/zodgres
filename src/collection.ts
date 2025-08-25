@@ -245,64 +245,64 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
   }
 
   protected zodToPostgresType(zodProperty: zod.ZodType): ColumnDefinition {
-    const { type: currentType, nullable, defaultValue, unique } = zodUnwrapType(zodProperty);
+    const { type: currentType, nullable, defaultValue, meta } = zodUnwrapType(zodProperty);
 
     // Map Zod types directly to PostgreSQL types
     if (currentType instanceof zod.ZodString) {
       // Check for maxLength constraint
       if (currentType.maxLength !== null) {
-        return { type: `VARCHAR(${currentType.maxLength})`, nullable, default: defaultValue, unique };
+        return { type: `VARCHAR(${currentType.maxLength})`, nullable, default: defaultValue, meta };
       }
-      return { type: 'TEXT', nullable, default: defaultValue, unique };
+      return { type: 'TEXT', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodNumber) {
       // Handle different number formats
       switch (currentType.format) {
         case 'float32':
-          return { type: 'REAL', nullable, default: defaultValue, unique };
+          return { type: 'REAL', nullable, default: defaultValue, meta };
         case 'float64':
-          return { type: 'DOUBLE PRECISION', nullable, default: defaultValue, unique };
+          return { type: 'DOUBLE PRECISION', nullable, default: defaultValue, meta };
         default:
-          return { type: 'DECIMAL', nullable, default: defaultValue, unique };
+          return { type: 'DECIMAL', nullable, default: defaultValue, meta };
       }
 
     } else if (currentType instanceof zod.ZodBoolean) {
-      return { type: 'BOOLEAN', nullable, default: defaultValue, unique };
+      return { type: 'BOOLEAN', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodDate) {
-      return { type: 'TIMESTAMP', nullable, default: (defaultValue) ? `now()` : null, unique };
+      return { type: 'TIMESTAMP', nullable, default: (defaultValue) ? `now()` : null, meta };
 
     } else if (currentType instanceof zod.ZodArray) {
-      return { type: 'JSONB', nullable, default: defaultValue, unique };
+      return { type: 'JSONB', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodObject) {
-      return { type: 'JSONB', nullable, default: defaultValue, unique };
+      return { type: 'JSONB', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodRecord) {
-      return { type: 'JSONB', nullable, default: defaultValue, unique };
+      return { type: 'JSONB', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodMap) {
-      return { type: 'JSONB', nullable, default: defaultValue, unique };
+      return { type: 'JSONB', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodAny) {
-      return { type: 'JSONB', nullable, default: defaultValue, unique };
+      return { type: 'JSONB', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodEnum) {
-      return { type: 'ENUM', nullable, default: defaultValue, options: currentType.options, unique };
+      return { type: 'ENUM', nullable, default: defaultValue, options: currentType.options, meta };
 
     } else if (currentType instanceof zod.ZodLiteral) {
-      return { type: 'TEXT', nullable, default: defaultValue, unique };
+      return { type: 'TEXT', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodUnion) {
       // For unions, default to TEXT unless we can determine a more specific type
-      return { type: 'TEXT', nullable, default: defaultValue, unique };
+      return { type: 'TEXT', nullable, default: defaultValue, meta };
 
     } else if (currentType instanceof zod.ZodGUID || currentType instanceof zod.ZodUUID) {
-      return { type: 'UUID', nullable, default: `gen_random_uuid()`, unique };
+      return { type: 'UUID', nullable, default: `gen_random_uuid()`, meta };
 
     } else {
       // Default fallback for unknown types
-      return { type: 'TEXT', nullable, default: defaultValue, unique };
+      return { type: 'TEXT', nullable, default: defaultValue, meta };
     }
   }
 
@@ -316,14 +316,30 @@ export class Collection<T extends zod.core.$ZodLooseShape = any> {
       updateDb = () => createEnumType(this.sql, def);
     }
 
-    if (name === 'id') {
-      if (def.type === 'UUID') {
-        columnDef += ` UUID PRIMARY KEY DEFAULT gen_random_uuid()`;
-
+    // Handle serial fields (auto-incrementing)
+    if (def.meta?.serial) {
+      if (name === 'id') {
+        if (def.type === 'UUID') {
+          columnDef += ` UUID PRIMARY KEY DEFAULT gen_random_uuid()`;
+        } else {
+          columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY`;
+        }
       } else {
-        columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY`;
-      }
+        // For non-id serial fields, create auto-incrementing column
+        if (def.type === 'UUID') {
+          columnDef += ` UUID DEFAULT gen_random_uuid()`;
+        } else {
+          columnDef += ` INTEGER GENERATED ALWAYS AS IDENTITY`;
+        }
 
+        if (!def.nullable) {
+          columnDef += ' NOT NULL';
+        }
+
+        if (def.meta?.unique) {
+          columnDef += ' UNIQUE';
+        }
+      }
     } else {
       columnDef += ` ${def.type}`;
 

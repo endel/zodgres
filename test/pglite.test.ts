@@ -14,7 +14,7 @@ describe("PGLite", () => {
     it("should create a collection", async () => {
         const db = connect(":memory:", { onnotice: () => { } });
         const my_collection = db.collection("my_collection", {
-            id: z.number().optional(),
+            id: z.number().serial(),
             name: z.string(),
         });
         await db.open();

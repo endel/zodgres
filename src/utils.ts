@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import type { ZodgresMeta } from './zod-ext.js';
 
 export type SQL = ReturnType<typeof postgres>;
 
@@ -7,7 +8,7 @@ export interface ColumnDefinition {
   nullable: boolean;
   default?: any;
   options?: any;
-  unique?: boolean;
+  meta: ZodgresMeta;
 }
 
 export async function createEnumType(
